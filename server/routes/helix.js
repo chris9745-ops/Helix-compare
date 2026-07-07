@@ -126,6 +126,10 @@ router.get('/diagnostic', async (req, res) => {
   const token = await require('../lib/helixClient').testConnection(conn).then(r => r.token);
 
   const formsToProbe = [
+    // Sanity check — these should exist on virtually every ITSM instance.
+    // If these 404 too, the /api/arsys/v1/entry path itself isn't routing
+    // correctly on this environment (not a form-naming problem).
+    'HPD:Help Desk', 'CTM:People', 'CTM:Support Group',
     // Workflow objects — different names across versions
     'ARActiveLink', 'AR Active Link', 'Active Link',
     'ARFilter', 'AR Filter',
@@ -171,7 +175,15 @@ router.get('/diagnostic', async (req, res) => {
       );
       results[form] = { status: r.status, count: r.data?.entries?.length ?? '?' };
     } catch (e) {
-      results[form] = { status: e.response?.status || e.code, error: e.response?.data?.messageText || e.message };
+      const raw = typeof e.response?.data === 'string'
+        ? e.response.data.slice(0, 300)
+        : e.response?.data;
+      results[form] = {
+        status: e.response?.status || e.code,
+        error: e.response?.data?.messageText || e.message,
+        contentType: e.response?.headers?.['content-type'],
+        raw
+      };
     }
   }
 

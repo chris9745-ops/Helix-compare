@@ -61,6 +61,12 @@ export default function DiagnosticPage() {
                     {result.status === 200
                       ? `✓ accessible`
                       : result.error || '—'}
+                    {result.contentType && (
+                      <div className={styles.rawDetail}>
+                        content-type: {result.contentType}
+                        {result.raw && <><br />{typeof result.raw === 'string' ? result.raw : JSON.stringify(result.raw)}</>}
+                      </div>
+                    )}
                   </span>
                 </div>
               ))}
