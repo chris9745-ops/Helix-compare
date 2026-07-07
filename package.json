@@ -1,15 +1,58 @@
 {
   "name": "helix-dev-tool",
   "version": "1.0.0",
-  "description": "BMC Helix Developer Studio replacement — web-based workflow editor",
+  "description": "BMC Helix configuration compare tool",
   "private": true,
+  "main": "electron/main.js",
   "workspaces": ["server", "client"],
   "scripts": {
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "start": "npm run start --prefix server"
+    "start": "npm run start --prefix server",
+    "build:client": "npm run build --prefix client",
+    "electron": "npm run build:client && electron .",
+    "dist:mac": "npm run build:client && electron-builder --mac",
+    "dist:win": "npm run build:client && electron-builder --win",
+    "dist": "npm run build:client && electron-builder --mac --win"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-async-errors": "^3.1.1",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "lowdb": "^1.0.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.nimbusnow.helixdevtool",
+    "productName": "Helix Dev Tool",
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "client/dist/**/*",
+      "!server/data/**",
+      "!**/*.map"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

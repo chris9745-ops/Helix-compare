@@ -1,9 +1,16 @@
 const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-const adapter = new FileSync(path.join(__dirname, '../data/connections.json'));
+// In the packaged Electron app, HELIX_DATA_DIR points at the OS per-user app
+// data directory (app.getPath('userData')) so connections survive app
+// updates/reinstalls instead of living inside the (often read-only) bundle.
+const dataDir = process.env.HELIX_DATA_DIR || path.join(__dirname, '../data');
+fs.mkdirSync(dataDir, { recursive: true });
+
+const adapter = new FileSync(path.join(dataDir, 'connections.json'));
 const db = low(adapter);
 
 db.defaults({ connections: [] }).write();
