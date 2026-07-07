@@ -3,5 +3,6 @@ server/node_modules/
 client/node_modules/
 server/data/connections.json
 dist/
+release/
 .env
 *.log

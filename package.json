@@ -12,8 +12,8 @@
     "build:client": "npm run build --prefix client",
     "electron": "npm run build:client && electron .",
     "dist:mac": "npm run build:client && electron-builder --mac",
-    "dist:win": "npm run build:client && electron-builder --win",
-    "dist": "npm run build:client && electron-builder --mac --win"
+    "dist:win": "npm run build:client && electron-builder --win --x64 --arm64",
+    "dist": "npm run build:client && electron-builder --mac && electron-builder --win --x64 --arm64"
   },
   "dependencies": {
     "axios": "^1.6.7",
@@ -45,14 +45,16 @@
     },
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "win": {
       "target": "nsis"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName} Setup ${version}-${arch}.${ext}"
     }
   }
 }
