@@ -54,6 +54,12 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+.hintCode {
+  font-family: var(--font-mono);
+  background: var(--bg-raised);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
 
 .errorBox {
   margin: 16px;

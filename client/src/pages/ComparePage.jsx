@@ -65,6 +65,7 @@ export default function ComparePage() {
   const [rightConnId, setRightConnId] = useState(null);
   const [formName, setFormName] = useState('');
   const [keyField, setKeyField] = useState('');
+  const [company, setCompany] = useState('');
   const [expanded, setExpanded] = useState(new Set());
 
   const mutation = useMutation({ mutationFn: compareData });
@@ -73,7 +74,11 @@ export default function ComparePage() {
   const canRun = !!(leftConnId && rightConnId && formName && keyField);
 
   const runCompare = () => {
-    mutation.mutate({ leftConnId, rightConnId, formName, keyField });
+    const trimmed = company.trim();
+    // Same qualification on both sides — we're comparing the same company's
+    // records across Dev/Prod, not different companies against each other.
+    const q = trimmed ? `'Company' = "${trimmed.replace(/"/g, '\\"')}"` : undefined;
+    mutation.mutate({ leftConnId, rightConnId, formName, keyField, qLeft: q, qRight: q });
   };
 
   const toggleExpand = (key) => {
@@ -123,9 +128,16 @@ export default function ComparePage() {
             value={keyField}
             onChange={e => setKeyField(e.target.value)}
           />
+          <input
+            className={styles.input}
+            placeholder="Company filter (optional, e.g. Germania)…"
+            value={company}
+            onChange={e => setCompany(e.target.value)}
+          />
         </div>
         <div className={styles.hint}>
           Presets are common starting points — exact form/field names vary by ITSM version. Confirm with the Forms browser or Diagnostics page first.
+          Company filter assumes the form has a standard <code className={styles.hintCode}>Company</code> field — adjust if your form uses a different name.
         </div>
 
         <Button variant="primary" disabled={!canRun} loading={mutation.isPending} onClick={runCompare}>
