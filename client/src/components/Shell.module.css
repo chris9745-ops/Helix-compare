@@ -1,0 +1,152 @@
+.shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 14px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brandIcon {
+  font-size: 22px;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.brandName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+
+.brandSub {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 1px;
+}
+
+.connSelector {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.connLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+.connSelect {
+  width: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.connSelect:focus {
+  border-color: var(--accent);
+}
+
+.connUrl {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.navSection {
+  padding: 12px 14px 4px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: all 0.1s ease;
+}
+
+.navItem:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.navItem.active {
+  color: var(--text-primary);
+  background: var(--bg-active);
+  border-left-color: var(--accent);
+}
+
+.navIcon {
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.navItem.active .navIcon {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.sidebarFooter {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.version {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
