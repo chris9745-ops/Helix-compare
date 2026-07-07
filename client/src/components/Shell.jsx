@@ -12,6 +12,8 @@ const NAV = [
   { section: 'Schema' },
   { to: '/forms',  label: 'Forms & Fields', icon: '▦' },
   { to: '/menus',  label: 'Menus',          icon: '≡' },
+  { section: 'Compare' },
+  { to: '/compare', label: 'Compare', icon: '⇄' },
   { section: 'Config' },
   { to: '/connections', label: 'Connections', icon: '⬡' },
   { to: '/diagnostic',  label: 'Diagnostics', icon: '⚕' },

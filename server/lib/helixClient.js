@@ -354,6 +354,7 @@ async function updateField(connection, formName, fieldId, fieldDef) {
 module.exports = {
   testConnection,
   clearToken,
+  queryEntries,
   getActiveLinkNames, getActiveLink, createActiveLink, updateActiveLink, deleteActiveLink,
   getFilterNames, getFilter, createFilter, updateFilter,
   getEscalationNames, getEscalation, updateEscalation,

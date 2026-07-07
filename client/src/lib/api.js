@@ -66,3 +66,13 @@ export const getMenus = () =>
   api.get('/helix/menus').then(r => r.data);
 export const getMenu = (name) =>
   api.get(`/helix/menus/${encodeURIComponent(name)}`).then(r => r.data);
+
+// ── Compare (Dev vs Prod) ────────────────────────────────────────────────────
+export const compareWorkflow = ({ leftConnId, rightConnId, objectType, form }) =>
+  api.post('/compare/workflow', { leftConnId, rightConnId, objectType, form }).then(r => r.data);
+
+export const compareWorkflowDetail = ({ leftConnId, rightConnId, objectType, name }) =>
+  api.post('/compare/workflow/detail', { leftConnId, rightConnId, objectType, name }).then(r => r.data);
+
+export const compareData = ({ leftConnId, rightConnId, formName, keyField, qLeft, qRight, fields }) =>
+  api.post('/compare/data', { leftConnId, rightConnId, formName, keyField, qLeft, qRight, fields }).then(r => r.data);

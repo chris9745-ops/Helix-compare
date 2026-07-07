@@ -6,6 +6,7 @@ import FiltersPage from './pages/FiltersPage';
 import EscalationsPage from './pages/EscalationsPage';
 import FormsPage from './pages/FormsPage';
 import MenusPage from './pages/MenusPage';
+import ComparePage from './pages/ComparePage';
 import DiagnosticPage from './pages/DiagnosticPage';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="escalations" element={<EscalationsPage />} />
           <Route path="forms" element={<FormsPage />} />
           <Route path="menus" element={<MenusPage />} />
+          <Route path="compare" element={<ComparePage />} />
           <Route path="diagnostic" element={<DiagnosticPage />} />
         </Route>
       </Routes>
