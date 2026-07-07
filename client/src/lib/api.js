@@ -3,9 +3,11 @@ import { useAppStore } from './store';
 
 const api = axios.create({ baseURL: '/api' });
 
-// Inject connection ID header for all helix requests
+// Inject connection ID header for all helix requests — unless the caller
+// already set one explicitly (e.g. Compare's per-side connection pickers,
+// which aren't tied to the sidebar's global instance selector).
 api.interceptors.request.use((config) => {
-  if (config.url?.startsWith('/helix')) {
+  if (config.url?.startsWith('/helix') && !config.headers['X-Connection-Id']) {
     const id = useAppStore.getState().activeConnectionId;
     if (id) config.headers['X-Connection-Id'] = id;
   }
@@ -35,6 +37,10 @@ export const updateField = (formName, fieldId, def) =>
 // No bulk-list endpoint — lookup by exact known menu name only.
 export const getMenu = (name) =>
   api.get(`/helix/menus/${encodeURIComponent(name)}`).then(r => r.data);
+
+// ── Companies (per explicit connection, not the sidebar's global one) ──────
+export const getCompanies = (connId) =>
+  api.get('/helix/companies', { headers: { 'X-Connection-Id': connId } }).then(r => r.data);
 
 // ── Compare (Dev vs Prod) ────────────────────────────────────────────────────
 export const compareData = ({ leftConnId, rightConnId, formName, keyField, qLeft, qRight, fields }) =>

@@ -49,6 +49,20 @@ router.get('/menus/:menuName', async (req, res) => {
   res.json(data);
 });
 
+// ── Companies ─────────────────────────────────────────────────────────────
+// Used to populate the Company dropdown on the Compare page.
+router.get('/companies', async (req, res) => {
+  const data = await helix.queryEntries(req.helixConn, 'CTM:Company', {
+    fields: 'values(Company Name)',
+    limit: 1000
+  });
+  const items = (data.entries || data || [])
+    .map(e => e.values?.['Company Name'])
+    .filter(Boolean)
+    .sort();
+  res.json({ items });
+});
+
 module.exports = router;
 
 // ── Diagnostic: probe which internal admin forms exist on this instance ────

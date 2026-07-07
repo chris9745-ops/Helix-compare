@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getConnections, compareData } from '../lib/api';
+import { getConnections, getCompanies, compareData } from '../lib/api';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
 import styles from './ComparePage.module.css';
@@ -12,6 +12,7 @@ const DATA_PRESETS = [
   { label: 'People', formName: 'CTM:People', keyField: 'Remedy Login ID' },
   { label: 'Company', formName: 'CTM:Company', keyField: 'Company Name' },
   { label: 'Operational Categorization', formName: 'CFG:Categorization', keyField: 'Name' },
+  { label: 'Service Requests', formName: 'SRM:Request', keyField: 'Request Number' },
 ];
 
 function formatVal(v) {
@@ -58,6 +59,27 @@ function FieldDiffTable({ fieldDiffs }) {
   );
 }
 
+// Shows exactly what was fetched for both sides of a record — the way to
+// tell "genuinely unchanged" apart from "the differing field was never
+// fetched in the first place" (BMC's entry API only returns the fields you
+// ask for; no `fields` param means whatever subset it defaults to).
+function RawValuesTable({ left, right }) {
+  const keys = Array.from(new Set([...Object.keys(left || {}), ...Object.keys(right || {})])).sort();
+  return (
+    <div className={styles.fieldDiffTable}>
+      {keys.map(k => (
+        <div key={k} className={styles.fieldDiffRow}>
+          <span className={styles.fieldDiffName}>{k}</span>
+          <span className={styles.fieldDiffLeft}>{formatVal(left?.[k])}</span>
+          <span className={styles.fieldDiffArrow}>·</span>
+          <span className={styles.fieldDiffRight}>{formatVal(right?.[k])}</span>
+        </div>
+      ))}
+      {keys.length === 0 && <div className={styles.hint}>No fields returned for this record.</div>}
+    </div>
+  );
+}
+
 export default function ComparePage() {
   const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: getConnections });
 
@@ -66,7 +88,17 @@ export default function ComparePage() {
   const [formName, setFormName] = useState('');
   const [keyField, setKeyField] = useState('');
   const [company, setCompany] = useState('');
+  const [fields, setFields] = useState('');
   const [expanded, setExpanded] = useState(new Set());
+  const [showUnchanged, setShowUnchanged] = useState(false);
+
+  const { data: companiesData, error: companiesError } = useQuery({
+    queryKey: ['companies', leftConnId],
+    queryFn: () => getCompanies(leftConnId),
+    enabled: !!leftConnId,
+    retry: false
+  });
+  const companies = companiesData?.items || [];
 
   const mutation = useMutation({ mutationFn: compareData });
   const result = mutation.data;
@@ -74,11 +106,16 @@ export default function ComparePage() {
   const canRun = !!(leftConnId && rightConnId && formName && keyField);
 
   const runCompare = () => {
-    const trimmed = company.trim();
+    const trimmedCompany = company.trim();
     // Same qualification on both sides — we're comparing the same company's
     // records across Dev/Prod, not different companies against each other.
-    const q = trimmed ? `'Company' = "${trimmed.replace(/"/g, '\\"')}"` : undefined;
-    mutation.mutate({ leftConnId, rightConnId, formName, keyField, qLeft: q, qRight: q });
+    const q = trimmedCompany ? `'Company' = "${trimmedCompany.replace(/"/g, '\\"')}"` : undefined;
+
+    const fieldList = fields.split(',').map(f => f.trim()).filter(Boolean);
+    if (fieldList.length && !fieldList.includes(keyField)) fieldList.unshift(keyField);
+    const fieldsParam = fieldList.length ? `values(${fieldList.join(',')})` : undefined;
+
+    mutation.mutate({ leftConnId, rightConnId, formName, keyField, qLeft: q, qRight: q, fields: fieldsParam });
   };
 
   const toggleExpand = (key) => {
@@ -130,14 +167,31 @@ export default function ComparePage() {
           />
           <input
             className={styles.input}
-            placeholder="Company filter (optional, e.g. Germania)…"
+            list="company-options"
+            placeholder="Company filter (optional)…"
             value={company}
             onChange={e => setCompany(e.target.value)}
+            disabled={!leftConnId}
+          />
+          <datalist id="company-options">
+            {companies.map(c => <option key={c} value={c} />)}
+          </datalist>
+        </div>
+
+        <div className={styles.optionsRow}>
+          <input
+            className={styles.input}
+            placeholder="Fields to compare (optional, comma-separated — leave blank to use BMC's default set)…"
+            value={fields}
+            onChange={e => setFields(e.target.value)}
           />
         </div>
+
         <div className={styles.hint}>
           Presets are common starting points — exact form/field names vary by ITSM version. Confirm with the Forms browser or Diagnostics page first.
-          Company filter assumes the form has a standard <code className={styles.hintCode}>Company</code> field — adjust if your form uses a different name.
+          Company filter assumes the form has a standard <code className={styles.hintCode}>Company</code> field.
+          {leftConnId && companiesError && ' Could not load a company list from the left connection (CTM:Company not found?) — type the name manually.'}
+          {' '}If a comparison shows no difference you know should exist, list the specific field(s) above — without it, BMC may only return a default subset of fields.
         </div>
 
         <Button variant="primary" disabled={!canRun} loading={mutation.isPending} onClick={runCompare}>
@@ -159,22 +213,28 @@ export default function ComparePage() {
             {totalItems === 0 && <div className={styles.empty}>No items found on either side.</div>}
 
             {result.removed.map(item => (
-              <div key={`removed-${item.key}`} className={`${styles.row} ${styles.rowRemoved}`}>
-                <span className={styles.rowTag}>only in left</span>
-                <span className={styles.rowName}>{item.key}</span>
+              <div key={`removed-${item.key}`} className={styles.rowGroup}>
+                <div className={`${styles.row} ${styles.rowRemoved}`} onClick={() => toggleExpand(`removed-${item.key}`)}>
+                  <span className={styles.rowTag}>only in left</span>
+                  <span className={styles.rowName}>{item.key}</span>
+                </div>
+                {expanded.has(`removed-${item.key}`) && <RawValuesTable left={item.left} right={{}} />}
               </div>
             ))}
             {result.added.map(item => (
-              <div key={`added-${item.key}`} className={`${styles.row} ${styles.rowAdded}`}>
-                <span className={styles.rowTag}>only in right</span>
-                <span className={styles.rowName}>{item.key}</span>
+              <div key={`added-${item.key}`} className={styles.rowGroup}>
+                <div className={`${styles.row} ${styles.rowAdded}`} onClick={() => toggleExpand(`added-${item.key}`)}>
+                  <span className={styles.rowTag}>only in right</span>
+                  <span className={styles.rowName}>{item.key}</span>
+                </div>
+                {expanded.has(`added-${item.key}`) && <RawValuesTable left={{}} right={item.right} />}
               </div>
             ))}
             {result.modified.map(item => (
               <div key={`modified-${item.key}`} className={styles.rowGroup}>
                 <div
                   className={`${styles.row} ${styles.rowModified}`}
-                  onClick={() => toggleExpand(item.key)}
+                  onClick={() => toggleExpand(`modified-${item.key}`)}
                 >
                   <span className={styles.rowTag}>modified</span>
                   <span className={styles.rowName}>{item.key}</span>
@@ -182,16 +242,27 @@ export default function ComparePage() {
                     {item.fieldDiffs.length} field{item.fieldDiffs.length === 1 ? '' : 's'} differ
                   </span>
                 </div>
-                {expanded.has(item.key) && (
+                {expanded.has(`modified-${item.key}`) && (
                   <FieldDiffTable fieldDiffs={item.fieldDiffs} />
                 )}
               </div>
             ))}
 
             {result.unchanged.length > 0 && (
-              <div className={styles.unchangedNote}>
-                {result.unchanged.length} unchanged item{result.unchanged.length === 1 ? '' : 's'} hidden
-              </div>
+              <>
+                <div className={styles.unchangedNote} onClick={() => setShowUnchanged(s => !s)} style={{ cursor: 'pointer' }}>
+                  {showUnchanged ? '▾' : '▸'} {result.unchanged.length} unchanged item{result.unchanged.length === 1 ? '' : 's'} {showUnchanged ? '' : '(click to show)'}
+                </div>
+                {showUnchanged && result.unchanged.map(item => (
+                  <div key={`unchanged-${item.key}`} className={styles.rowGroup}>
+                    <div className={styles.row} onClick={() => toggleExpand(`unchanged-${item.key}`)}>
+                      <span className={styles.rowTag}>unchanged</span>
+                      <span className={styles.rowName}>{item.key}</span>
+                    </div>
+                    {expanded.has(`unchanged-${item.key}`) && <RawValuesTable left={item.left} right={item.right} />}
+                  </div>
+                ))}
+              </>
             )}
           </div>
         </div>
