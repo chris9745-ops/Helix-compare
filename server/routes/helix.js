@@ -70,9 +70,16 @@ router.get('/diagnostic', async (req, res) => {
   const conn = req.helixConn;
   const token = await require('../lib/helixClient').testConnection(conn).then(r => r.token);
 
-  const formsToProbe = [
+  // A custom comma-separated ?forms= list replaces the default probe set —
+  // lets you test candidate form names (e.g. for SRM catalog or DWP admin
+  // config forms) without needing a code change first.
+  const customForms = req.query.forms
+    ? req.query.forms.split(',').map(f => f.trim()).filter(Boolean)
+    : null;
+
+  const formsToProbe = customForms || [
     // Sanity check — these should exist on virtually every ITSM instance.
-    // If these 404 too, the /api/arsys/v1/entry path itself isn't routing
+    // If these 404 too, the /api/arsys/v1/entry path isn't routing
     // correctly on this environment (not a form-naming problem).
     'HPD:Help Desk', 'CTM:People', 'CTM:Support Group',
     // Workflow objects — different names across versions

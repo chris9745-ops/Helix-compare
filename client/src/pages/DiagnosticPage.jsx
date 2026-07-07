@@ -9,13 +9,17 @@ export default function DiagnosticPage() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [customForms, setCustomForms] = useState('');
 
-  const run = async () => {
+  const run = async (forms) => {
     setLoading(true);
     setError(null);
     setResults(null);
     try {
-      const res = await fetch('/api/helix/diagnostic', {
+      const url = forms
+        ? `/api/helix/diagnostic?forms=${encodeURIComponent(forms)}`
+        : '/api/helix/diagnostic';
+      const res = await fetch(url, {
         headers: { 'X-Connection-Id': activeConnectionId }
       });
       const data = await res.json();
@@ -31,10 +35,10 @@ export default function DiagnosticPage() {
     <div className={styles.page}>
       <PageHeader
         title="Diagnostics"
-        subtitle="Probe which internal AR System forms are accessible on your instance"
+        subtitle="Probe which forms are accessible on your instance via the REST entry API"
         actions={
-          <Button variant="primary" onClick={run} loading={loading} disabled={!activeConnectionId}>
-            Run diagnostic
+          <Button variant="primary" onClick={() => run()} loading={loading} disabled={!activeConnectionId}>
+            Run default probe
           </Button>
         }
       />
@@ -42,12 +46,32 @@ export default function DiagnosticPage() {
         {!activeConnectionId && (
           <div className={styles.warn}>Select a connection first</div>
         )}
+
+        <div className={styles.customProbe}>
+          <div className={styles.hint}>
+            Not sure of a form's exact name (e.g. an SRM catalog form or a DWP admin config form)?
+            Type one or more candidate names below (comma-separated) and test them directly, instead of guessing in Compare.
+          </div>
+          <div className={styles.customProbeRow}>
+            <input
+              className={styles.customProbeInput}
+              placeholder="e.g. SRD:Request, SRM:Request Catalog, DWP:Branding…"
+              value={customForms}
+              onChange={e => setCustomForms(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && customForms.trim() && run(customForms)}
+            />
+            <Button onClick={() => run(customForms)} loading={loading} disabled={!activeConnectionId || !customForms.trim()}>
+              Test these
+            </Button>
+          </div>
+        </div>
+
         {error && <div className={styles.error}>✗ {error}</div>}
         {results && (
           <div className={styles.results}>
             <div className={styles.hint}>
               Forms with status <span className={styles.ok}>200</span> are accessible.
-              These are the ones we can use to read workflow objects.
+              These are the ones you can use in Compare.
             </div>
             <div className={styles.table}>
               <div className={styles.thead}>

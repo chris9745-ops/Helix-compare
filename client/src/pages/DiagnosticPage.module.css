@@ -28,3 +28,26 @@
   word-break: break-word;
   white-space: pre-wrap;
 }
+
+.customProbe {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.customProbeRow {
+  display: flex;
+  gap: 8px;
+}
+.customProbeInput {
+  flex: 1;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 13px;
+  outline: none;
+}
+.customProbeInput:focus { border-color: var(--accent); }
