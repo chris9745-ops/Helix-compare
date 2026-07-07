@@ -5,10 +5,6 @@ import { getConnections } from '../lib/api';
 import styles from './Shell.module.css';
 
 const NAV = [
-  { section: 'Workflow' },
-  { to: '/activelinks', label: 'Active Links', icon: '⚡' },
-  { to: '/filters',     label: 'Filters',      icon: '⚙' },
-  { to: '/escalations', label: 'Escalations',  icon: '⏱' },
   { section: 'Schema' },
   { to: '/forms',  label: 'Forms & Fields', icon: '▦' },
   { to: '/menus',  label: 'Menus',          icon: '≡' },

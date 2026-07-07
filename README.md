@@ -1,22 +1,39 @@
 # Helix Dev Tool
 
-A web-based replacement for BMC Developer Studio — runs on Mac, Windows, Linux.
-Built for Helix AR System **25.x and newer** (full workflow read/write REST API).
+A web tool for comparing BMC Helix ITSM configuration/reference data between
+two environments (e.g. Dev vs Prod), plus a light schema browser.
 
 ## What it does
 
 - **Connection manager** — save multiple Helix instances, test JWT auth, auto-refresh tokens
-- **Active Link browser** — search, view, edit, create, delete active links
-- **Filter browser** — view and manage server-side filters by form
-- **Escalation browser** — view scheduled workflow
-- **Forms & Fields** — browse form schemas and field definitions side-by-side
-- **Menu browser** — inspect AR menus
+- **Compare** — diff entries on any form between two connections (e.g. `CTM:Support Group`,
+  `CTM:People`, `CTM:Company`), matched by a key field, showing added/removed/modified/unchanged
+- **Forms & Fields** — look up a form's field definitions
+- **Menus** — look up a specific menu's definition by exact name
+- **Diagnostics** — probe which forms are reachable via the REST API on a given instance
+
+## A REST API limitation worth knowing
+
+BMC's documented REST APIs for Helix ITSM (both the "platform REST API" and the
+"simplified REST API") don't expose **Active Links, Filters, or Escalations** at all —
+those workflow objects only exist in the classic AR System native-protocol API that
+Developer Studio speaks (a different port, not HTTP/REST). This tool can't browse or
+compare those objects as a result; comparing workflow customizations between
+environments still requires Developer Studio's `.def` export, or `arexportcmd`.
+
+Similarly, **Menus** only support lookup by exact known name — there's no bulk-list
+endpoint, so unlike entries there's no way to enumerate "all menus" without another
+source telling you what to look up.
+
+**Entries on a form** (the `/api/arsys/v1/entry/{formName}` resource) are the one
+object type BMC's REST API fully supports for listing/searching/diffing — which is
+why Compare is scoped to configuration/reference data rather than workflow objects.
 
 ## Requirements
 
 - Node.js 18+
 - npm 8+
-- A BMC Helix 25.x instance with REST API access
+- A BMC Helix instance with REST API access
 
 ## Setup
 
@@ -35,11 +52,13 @@ Vite proxies all `/api` calls to the backend automatically.
 
 ## First steps
 
-1. Click **Connections** in the sidebar
-2. Click **Add connection** and enter your Helix instance URL, username, and password
-3. Click **Test auth** to verify the connection works
-4. Click **Use this instance** to activate it
-5. Navigate to **Active Links**, **Filters**, etc.
+1. Click **Connections** in the sidebar, add your Dev and Prod instances, and **Test auth** on each
+2. Go to **Compare**, pick Dev on the left and Prod on the right
+3. Enter a form name (e.g. `CTM:Support Group`) and the field that uniquely identifies each record (e.g. `Support Group Name`)
+4. **Run compare** — click a "modified" row to see which fields differ
+
+If you're not sure of a form's exact name/fields, check **Forms & Fields** or run
+**Diagnostics** first.
 
 ## Project structure
 
@@ -49,10 +68,12 @@ helix-dev-tool/
 │   ├── index.js          # Entry point
 │   ├── routes/
 │   │   ├── connections.js  # Connection CRUD
-│   │   └── helix.js        # Helix API proxy
+│   │   ├── helix.js        # Forms/Fields/Menus + diagnostic probe
+│   │   └── compare.js      # Entry-diff endpoint
 │   ├── lib/
 │   │   ├── connectionStore.js  # lowdb persistence
-│   │   └── helixClient.js      # JWT auth + all API calls
+│   │   ├── helixClient.js      # JWT auth + REST calls
+│   │   └── diff.js             # Generic key-based + deep diff
 │   └── data/
 │       └── connections.json    # Stored connections (gitignore this!)
 ├── client/               # React frontend (Vite)
@@ -70,9 +91,7 @@ The backend uses Node's `https.Agent({ rejectUnauthorized: false })` for those c
 
 ## Roadmap
 
-- [ ] Active Link visual editor (trigger → condition → action builder)
-- [ ] Filter editor
-- [ ] Field creator with type/properties form
-- [ ] `.def` export/import
-- [ ] AI workflow builder ("describe what you want → generates the JSON")
-- [ ] Diff/compare workflow between two instances
+- [ ] Verify `getForms()` (list-all-forms) and `getFormSchema()` against a real instance —
+      likely have the same wrong-endpoint issue `getFormFields()` had before it was fixed
+- [ ] `.def` file upload + diff, as the real path to comparing workflow objects
+- [ ] Saved compare presets (form name + key field) per connection pair

@@ -1,16 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getConnections, compareWorkflow, compareWorkflowDetail, compareData } from '../lib/api';
+import { getConnections, compareData } from '../lib/api';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
 import styles from './ComparePage.module.css';
-
-const CODE_TYPES = [
-  { value: 'activelinks', label: 'Active Links' },
-  { value: 'filters', label: 'Filters' },
-  { value: 'escalations', label: 'Escalations' },
-  { value: 'menus', label: 'Menus' },
-];
 
 // Common starting points only — exact form/field names vary across ITSM
 // versions and modules, so these are meant to be edited, not trusted blindly.
@@ -70,33 +63,17 @@ export default function ComparePage() {
 
   const [leftConnId, setLeftConnId] = useState(null);
   const [rightConnId, setRightConnId] = useState(null);
-  const [mode, setMode] = useState('code'); // 'code' | 'data'
-  const [objectType, setObjectType] = useState('activelinks');
-  const [form, setForm] = useState('');
   const [formName, setFormName] = useState('');
   const [keyField, setKeyField] = useState('');
   const [expanded, setExpanded] = useState(new Set());
-  const [detailItem, setDetailItem] = useState(null); // { name } — code mode drawer
 
-  const workflowMutation = useMutation({ mutationFn: compareWorkflow });
-  const dataMutation = useMutation({ mutationFn: compareData });
-  const activeMutation = mode === 'code' ? workflowMutation : dataMutation;
-  const result = activeMutation.data;
+  const mutation = useMutation({ mutationFn: compareData });
+  const result = mutation.data;
 
-  const detailQuery = useQuery({
-    queryKey: ['compareDetail', leftConnId, rightConnId, objectType, detailItem?.name],
-    queryFn: () => compareWorkflowDetail({ leftConnId, rightConnId, objectType, name: detailItem.name }),
-    enabled: !!detailItem && mode === 'code'
-  });
-
-  const canRun = !!(leftConnId && rightConnId && (mode === 'code' || (formName && keyField)));
+  const canRun = !!(leftConnId && rightConnId && formName && keyField);
 
   const runCompare = () => {
-    if (mode === 'code') {
-      workflowMutation.mutate({ leftConnId, rightConnId, objectType, form: form || undefined });
-    } else {
-      dataMutation.mutate({ leftConnId, rightConnId, formName, keyField });
-    }
+    mutation.mutate({ leftConnId, rightConnId, formName, keyField });
   };
 
   const toggleExpand = (key) => {
@@ -115,7 +92,7 @@ export default function ComparePage() {
     <div className={styles.page}>
       <PageHeader
         title="Compare"
-        subtitle="Diff workflow objects and configuration data between two Helix instances"
+        subtitle="Diff configuration/reference data between two Helix instances"
       />
 
       <div className={styles.controls}>
@@ -125,71 +102,40 @@ export default function ComparePage() {
           <ConnectionPicker label="Right (e.g. Prod)" value={rightConnId} onChange={setRightConnId} connections={connections} />
         </div>
 
-        <div className={styles.modeTabs}>
-          <button
-            className={`${styles.modeTab} ${mode === 'code' ? styles.modeTabActive : ''}`}
-            onClick={() => setMode('code')}
-          >
-            Code (workflow)
-          </button>
-          <button
-            className={`${styles.modeTab} ${mode === 'data' ? styles.modeTabActive : ''}`}
-            onClick={() => setMode('data')}
-          >
-            Data (configuration)
-          </button>
+        <div className={styles.optionsRow}>
+          <input
+            className={styles.input}
+            list="data-presets"
+            placeholder="Form name (e.g. CTM:Support Group)…"
+            value={formName}
+            onChange={e => {
+              setFormName(e.target.value);
+              const preset = DATA_PRESETS.find(p => p.formName === e.target.value);
+              if (preset) setKeyField(preset.keyField);
+            }}
+          />
+          <datalist id="data-presets">
+            {DATA_PRESETS.map(p => <option key={p.formName} value={p.formName}>{p.label}</option>)}
+          </datalist>
+          <input
+            className={styles.input}
+            placeholder="Key field (e.g. Name)…"
+            value={keyField}
+            onChange={e => setKeyField(e.target.value)}
+          />
+        </div>
+        <div className={styles.hint}>
+          Presets are common starting points — exact form/field names vary by ITSM version. Confirm with the Forms browser or Diagnostics page first.
         </div>
 
-        {mode === 'code' ? (
-          <div className={styles.optionsRow}>
-            <select className={styles.select} value={objectType} onChange={e => setObjectType(e.target.value)}>
-              {CODE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <input
-              className={styles.input}
-              placeholder="Filter by form (optional)…"
-              value={form}
-              onChange={e => setForm(e.target.value)}
-            />
-          </div>
-        ) : (
-          <>
-            <div className={styles.optionsRow}>
-              <input
-                className={styles.input}
-                list="data-presets"
-                placeholder="Form name (e.g. CTM:Support Group)…"
-                value={formName}
-                onChange={e => {
-                  setFormName(e.target.value);
-                  const preset = DATA_PRESETS.find(p => p.formName === e.target.value);
-                  if (preset) setKeyField(preset.keyField);
-                }}
-              />
-              <datalist id="data-presets">
-                {DATA_PRESETS.map(p => <option key={p.formName} value={p.formName}>{p.label}</option>)}
-              </datalist>
-              <input
-                className={styles.input}
-                placeholder="Key field (e.g. Name)…"
-                value={keyField}
-                onChange={e => setKeyField(e.target.value)}
-              />
-            </div>
-            <div className={styles.hint}>
-              Presets are common starting points — exact form/field names vary by ITSM version. Confirm with the Forms browser or Diagnostics page first.
-            </div>
-          </>
-        )}
-
-        <Button variant="primary" disabled={!canRun} loading={activeMutation.isPending} onClick={runCompare}>
+        <Button variant="primary" disabled={!canRun} loading={mutation.isPending} onClick={runCompare}>
           Run compare
         </Button>
       </div>
 
-      {activeMutation.error && (
+      {mutation.error && (
         <div className={styles.errorBox}>
-          ✗ {activeMutation.error.response?.data?.error || activeMutation.error.message}
+          ✗ {mutation.error.response?.data?.error || mutation.error.message}
         </div>
       )}
 
@@ -216,7 +162,7 @@ export default function ComparePage() {
               <div key={`modified-${item.key}`} className={styles.rowGroup}>
                 <div
                   className={`${styles.row} ${styles.rowModified}`}
-                  onClick={() => mode === 'code' ? setDetailItem({ name: item.key }) : toggleExpand(item.key)}
+                  onClick={() => toggleExpand(item.key)}
                 >
                   <span className={styles.rowTag}>modified</span>
                   <span className={styles.rowName}>{item.key}</span>
@@ -224,7 +170,7 @@ export default function ComparePage() {
                     {item.fieldDiffs.length} field{item.fieldDiffs.length === 1 ? '' : 's'} differ
                   </span>
                 </div>
-                {mode === 'data' && expanded.has(item.key) && (
+                {expanded.has(item.key) && (
                   <FieldDiffTable fieldDiffs={item.fieldDiffs} />
                 )}
               </div>
@@ -235,34 +181,6 @@ export default function ComparePage() {
                 {result.unchanged.length} unchanged item{result.unchanged.length === 1 ? '' : 's'} hidden
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {detailItem && mode === 'code' && (
-        <div className={styles.overlay} onClick={e => e.target === e.currentTarget && setDetailItem(null)}>
-          <div className={styles.drawer}>
-            <div className={styles.drawerHeader}>
-              <span className="mono">{detailItem.name}</span>
-              <Button size="sm" variant="ghost" onClick={() => setDetailItem(null)}>✕</Button>
-            </div>
-            <div className={styles.drawerBody}>
-              {detailQuery.isLoading && <div className={styles.loading}>Loading diff…</div>}
-              {detailQuery.error && (
-                <div className={styles.errorBox}>
-                  ✗ {detailQuery.error.response?.data?.error || detailQuery.error.message}
-                </div>
-              )}
-              {detailQuery.data && (
-                detailQuery.data.diffs.length === 0 ? (
-                  <div className={styles.empty}>
-                    No field differences found — the full definitions match on both sides.
-                  </div>
-                ) : (
-                  <FieldDiffTable fieldDiffs={detailQuery.data.diffs} />
-                )
-              )}
-            </div>
           </div>
         </div>
       )}

@@ -143,100 +143,6 @@ async function testConnection(connection) {
   return { success: true, token: token.substring(0, 20) + '...' };
 }
 
-// ── Active Links ───────────────────────────────────────────────────────────
-// AR System stores active links in the internal "ARActiveLink" admin form
-async function getActiveLinkNames(connection, formName) {
-  const q = formName ? `'Schema Name' = "${formName}"` : null;
-  const fields = 'values(Name,Schema Name,Order,Enable,Modified Date,Modified By)';
-  try {
-    const data = await queryEntries(connection, 'ARActiveLink', { q, fields, limit: 200 });
-    // Normalize into a consistent shape
-    const items = (data.entries || data).map(e => ({
-      name: e.values?.['Name'] || e.values?.Name,
-      schemaName: e.values?.['Schema Name'],
-      executionOrder: e.values?.Order,
-      enabled: e.values?.Enable !== 0,
-      modifiedDate: e.values?.['Modified Date'],
-      modifiedBy: e.values?.['Modified By'],
-      _entryId: e.entryId || e._links?.self?.[0]?.href?.split('/').pop()
-    }));
-    return { items };
-  } catch (err) {
-    // Some instances use different internal form names
-    if (err.response?.status === 404) {
-      throw new Error('Active Links admin form not accessible. Ensure your user has AR System administrator permissions.');
-    }
-    throw err;
-  }
-}
-
-async function getActiveLink(connection, name) {
-  const q = `'Name' = "${name}"`;
-  const data = await queryEntries(connection, 'ARActiveLink', { q });
-  const entry = (data.entries || data)?.[0];
-  if (!entry) throw new Error(`Active link "${name}" not found`);
-  return entry.values || entry;
-}
-
-// ── Filters ────────────────────────────────────────────────────────────────
-async function getFilterNames(connection, formName) {
-  const q = formName ? `'Schema Name' = "${formName}"` : null;
-  const fields = 'values(Name,Schema Name,Order,Enable,Modified Date,Modified By)';
-  try {
-    const data = await queryEntries(connection, 'ARFilter', { q, fields, limit: 200 });
-    const items = (data.entries || data).map(e => ({
-      name: e.values?.['Name'],
-      schemaName: e.values?.['Schema Name'],
-      executionOrder: e.values?.Order,
-      enabled: e.values?.Enable !== 0,
-      modifiedDate: e.values?.['Modified Date'],
-      modifiedBy: e.values?.['Modified By'],
-    }));
-    return { items };
-  } catch (err) {
-    if (err.response?.status === 404) {
-      throw new Error('Filter admin form not accessible. Ensure your user has AR System administrator permissions.');
-    }
-    throw err;
-  }
-}
-
-async function getFilter(connection, name) {
-  const q = `'Name' = "${name}"`;
-  const data = await queryEntries(connection, 'ARFilter', { q });
-  const entry = (data.entries || data)?.[0];
-  if (!entry) throw new Error(`Filter "${name}" not found`);
-  return entry.values || entry;
-}
-
-// ── Escalations ────────────────────────────────────────────────────────────
-async function getEscalationNames(connection) {
-  const fields = 'values(Name,Schema Name,Enable,Modified Date)';
-  try {
-    const data = await queryEntries(connection, 'AREscalation', { fields, limit: 200 });
-    const items = (data.entries || data).map(e => ({
-      name: e.values?.['Name'],
-      schemaName: e.values?.['Schema Name'],
-      enabled: e.values?.Enable !== 0,
-      modifiedDate: e.values?.['Modified Date'],
-    }));
-    return { items };
-  } catch (err) {
-    if (err.response?.status === 404) {
-      throw new Error('Escalation admin form not accessible. Ensure your user has AR System administrator permissions.');
-    }
-    throw err;
-  }
-}
-
-async function getEscalation(connection, name) {
-  const q = `'Name' = "${name}"`;
-  const data = await queryEntries(connection, 'AREscalation', { q });
-  const entry = (data.entries || data)?.[0];
-  if (!entry) throw new Error(`Escalation "${name}" not found`);
-  return entry.values || entry;
-}
-
 // ── Forms / Schema ─────────────────────────────────────────────────────────
 async function getForms(connection) {
   // ARSchema is the internal form that lists all forms
@@ -268,81 +174,18 @@ async function getFormSchema(connection, formName) {
 }
 
 async function getFormFields(connection, formName) {
-  // ARField stores field definitions per form
-  try {
-    const q = `'Schema Name' = "${formName}"`;
-    const fields = 'values(Field ID,Field Name,Datatype,Required,Modified Date)';
-    const data = await queryEntries(connection, 'ARField', { q, fields, limit: 500 });
-    const items = (data.entries || data).map(e => ({
-      fieldId: e.values?.['Field ID'],
-      fieldName: e.values?.['Field Name'],
-      dataType: e.values?.Datatype,
-      required: e.values?.Required === 1,
-      modifiedDate: e.values?.['Modified Date'],
-    }));
-    return { items };
-  } catch (err) {
-    // Fallback to schema fields endpoint
-    try {
-      return await helixGet(connection, `/api/arsys/v1/schema/${encodeURIComponent(formName)}/fields`);
-    } catch {
-      throw err;
-    }
-  }
+  // Documented platform REST API resource: "field on a form" — GET /fields/{formName}
+  return helixGet(connection, `/api/arsys/v1/fields/${encodeURIComponent(formName)}`);
 }
 
 // ── Menus ──────────────────────────────────────────────────────────────────
-async function getMenus(connection) {
-  try {
-    const fields = 'values(Menu Name,Menu Type,Modified Date)';
-    const data = await queryEntries(connection, 'ARCharMenu', { fields, limit: 200 });
-    const items = (data.entries || data).map(e => ({
-      name: e.values?.['Menu Name'],
-      menuType: e.values?.['Menu Type'],
-      modifiedDate: e.values?.['Modified Date'],
-    }));
-    return { items };
-  } catch (err) {
-    if (err.response?.status === 404) {
-      throw new Error('Menu admin form not accessible.');
-    }
-    throw err;
-  }
-}
-
+// Documented platform REST API resource: "menu on a form" — there is no
+// bulk-list endpoint, only lookup by known menu name.
 async function getMenu(connection, menuName) {
-  const q = `'Menu Name' = "${menuName}"`;
-  const data = await queryEntries(connection, 'ARCharMenu', { q });
-  const entry = (data.entries || data)?.[0];
-  if (!entry) throw new Error(`Menu "${menuName}" not found`);
-  return entry.values || entry;
+  return helixGet(connection, `/api/arsys/v1/menu/${encodeURIComponent(menuName)}`);
 }
 
 // ── Stub write operations (for future implementation) ──────────────────────
-async function createActiveLink(connection, definition) {
-  throw new Error('Creating active links via REST API requires AR System admin API access. Export/import via .def files is the supported path.');
-}
-
-async function updateActiveLink(connection, name, definition) {
-  throw new Error('Updating active links via REST API requires AR System admin API access.');
-}
-
-async function deleteActiveLink(connection, name) {
-  throw new Error('Deleting active links via REST API requires AR System admin API access.');
-}
-
-async function createFilter(connection, definition) {
-  throw new Error('Creating filters via REST API requires AR System admin API access.');
-}
-
-async function updateFilter(connection, name, definition) {
-  throw new Error('Updating filters via REST API requires AR System admin API access.');
-}
-
-async function updateEscalation(connection, name, definition) {
-  throw new Error('Updating escalations via REST API requires AR System admin API access.');
-}
-
 async function createField(connection, formName, fieldDef) {
   throw new Error('Creating fields via REST API is not supported in this version.');
 }
@@ -355,9 +198,6 @@ module.exports = {
   testConnection,
   clearToken,
   queryEntries,
-  getActiveLinkNames, getActiveLink, createActiveLink, updateActiveLink, deleteActiveLink,
-  getFilterNames, getFilter, createFilter, updateFilter,
-  getEscalationNames, getEscalation, updateEscalation,
   getForms, getFormSchema, getFormFields, createField, updateField,
-  getMenus, getMenu
+  getMenu
 };

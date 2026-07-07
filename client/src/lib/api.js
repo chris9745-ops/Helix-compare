@@ -19,36 +19,6 @@ export const updateConnection = (id, data) => api.put(`/connections/${id}`, data
 export const deleteConnection = (id) => api.delete(`/connections/${id}`);
 export const testConnection = (id) => api.post(`/connections/${id}/test`).then(r => r.data);
 
-// ── Active Links ───────────────────────────────────────────────────────────
-export const getActiveLinks = (form) =>
-  api.get('/helix/activelinks', { params: form ? { form } : {} }).then(r => r.data);
-export const getActiveLink = (name) =>
-  api.get(`/helix/activelinks/${encodeURIComponent(name)}`).then(r => r.data);
-export const createActiveLink = (def) =>
-  api.post('/helix/activelinks', def).then(r => r.data);
-export const updateActiveLink = (name, def) =>
-  api.put(`/helix/activelinks/${encodeURIComponent(name)}`, def).then(r => r.data);
-export const deleteActiveLink = (name) =>
-  api.delete(`/helix/activelinks/${encodeURIComponent(name)}`);
-
-// ── Filters ────────────────────────────────────────────────────────────────
-export const getFilters = (form) =>
-  api.get('/helix/filters', { params: form ? { form } : {} }).then(r => r.data);
-export const getFilter = (name) =>
-  api.get(`/helix/filters/${encodeURIComponent(name)}`).then(r => r.data);
-export const createFilter = (def) =>
-  api.post('/helix/filters', def).then(r => r.data);
-export const updateFilter = (name, def) =>
-  api.put(`/helix/filters/${encodeURIComponent(name)}`, def).then(r => r.data);
-
-// ── Escalations ────────────────────────────────────────────────────────────
-export const getEscalations = () =>
-  api.get('/helix/escalations').then(r => r.data);
-export const getEscalation = (name) =>
-  api.get(`/helix/escalations/${encodeURIComponent(name)}`).then(r => r.data);
-export const updateEscalation = (name, def) =>
-  api.put(`/helix/escalations/${encodeURIComponent(name)}`, def).then(r => r.data);
-
 // ── Forms ──────────────────────────────────────────────────────────────────
 export const getForms = () =>
   api.get('/helix/forms').then(r => r.data);
@@ -62,17 +32,10 @@ export const updateField = (formName, fieldId, def) =>
   api.put(`/helix/forms/${encodeURIComponent(formName)}/fields/${fieldId}`, def).then(r => r.data);
 
 // ── Menus ──────────────────────────────────────────────────────────────────
-export const getMenus = () =>
-  api.get('/helix/menus').then(r => r.data);
+// No bulk-list endpoint — lookup by exact known menu name only.
 export const getMenu = (name) =>
   api.get(`/helix/menus/${encodeURIComponent(name)}`).then(r => r.data);
 
 // ── Compare (Dev vs Prod) ────────────────────────────────────────────────────
-export const compareWorkflow = ({ leftConnId, rightConnId, objectType, form }) =>
-  api.post('/compare/workflow', { leftConnId, rightConnId, objectType, form }).then(r => r.data);
-
-export const compareWorkflowDetail = ({ leftConnId, rightConnId, objectType, name }) =>
-  api.post('/compare/workflow/detail', { leftConnId, rightConnId, objectType, name }).then(r => r.data);
-
 export const compareData = ({ leftConnId, rightConnId, formName, keyField, qLeft, qRight, fields }) =>
   api.post('/compare/data', { leftConnId, rightConnId, formName, keyField, qLeft, qRight, fields }).then(r => r.data);

@@ -13,72 +13,6 @@ router.use((req, res, next) => {
   next();
 });
 
-// ── Active Links ──────────────────────────────────────────────────────────
-
-router.get('/activelinks', async (req, res) => {
-  const data = await helix.getActiveLinkNames(req.helixConn, req.query.form);
-  res.json(data);
-});
-
-router.get('/activelinks/:name', async (req, res) => {
-  const data = await helix.getActiveLink(req.helixConn, req.params.name);
-  res.json(data);
-});
-
-router.post('/activelinks', async (req, res) => {
-  const data = await helix.createActiveLink(req.helixConn, req.body);
-  res.status(201).json(data);
-});
-
-router.put('/activelinks/:name', async (req, res) => {
-  const data = await helix.updateActiveLink(req.helixConn, req.params.name, req.body);
-  res.json(data);
-});
-
-router.delete('/activelinks/:name', async (req, res) => {
-  await helix.deleteActiveLink(req.helixConn, req.params.name);
-  res.status(204).send();
-});
-
-// ── Filters ───────────────────────────────────────────────────────────────
-
-router.get('/filters', async (req, res) => {
-  const data = await helix.getFilterNames(req.helixConn, req.query.form);
-  res.json(data);
-});
-
-router.get('/filters/:name', async (req, res) => {
-  const data = await helix.getFilter(req.helixConn, req.params.name);
-  res.json(data);
-});
-
-router.post('/filters', async (req, res) => {
-  const data = await helix.createFilter(req.helixConn, req.body);
-  res.status(201).json(data);
-});
-
-router.put('/filters/:name', async (req, res) => {
-  const data = await helix.updateFilter(req.helixConn, req.params.name, req.body);
-  res.json(data);
-});
-
-// ── Escalations ───────────────────────────────────────────────────────────
-
-router.get('/escalations', async (req, res) => {
-  const data = await helix.getEscalationNames(req.helixConn);
-  res.json(data);
-});
-
-router.get('/escalations/:name', async (req, res) => {
-  const data = await helix.getEscalation(req.helixConn, req.params.name);
-  res.json(data);
-});
-
-router.put('/escalations/:name', async (req, res) => {
-  const data = await helix.updateEscalation(req.helixConn, req.params.name, req.body);
-  res.json(data);
-});
-
 // ── Forms / Schema ────────────────────────────────────────────────────────
 
 router.get('/forms', async (req, res) => {
@@ -107,11 +41,8 @@ router.put('/forms/:formName/fields/:fieldId', async (req, res) => {
 });
 
 // ── Menus ─────────────────────────────────────────────────────────────────
-
-router.get('/menus', async (req, res) => {
-  const data = await helix.getMenus(req.helixConn);
-  res.json(data);
-});
+// No bulk-list endpoint exists in BMC's platform REST API — lookup by known
+// menu name only.
 
 router.get('/menus/:menuName', async (req, res) => {
   const data = await helix.getMenu(req.helixConn, req.params.menuName);
