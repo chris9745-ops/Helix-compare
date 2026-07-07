@@ -45,3 +45,6 @@ export const getCompanies = (connId) =>
 // ── Compare (Dev vs Prod) ────────────────────────────────────────────────────
 export const compareData = ({ leftConnId, rightConnId, formName, keyField, qLeft, qRight, fields }) =>
   api.post('/compare/data', { leftConnId, rightConnId, formName, keyField, qLeft, qRight, fields }).then(r => r.data);
+
+export const compareFields = ({ leftConnId, rightConnId, formName, keyField }) =>
+  api.post('/compare/fields', { leftConnId, rightConnId, formName, keyField }).then(r => r.data);

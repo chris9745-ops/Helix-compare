@@ -8,11 +8,19 @@ web app in dev mode, or packages into a real desktop app (Mac/Windows) — see
 ## What it does
 
 - **Connection manager** — save multiple Helix instances, test JWT auth, auto-refresh tokens
-- **Compare** — diff entries on any form between two connections (e.g. `CTM:Support Group`,
-  `CTM:People`, `CTM:Company`), matched by a key field, showing added/removed/modified/unchanged
+- **Compare** — two modes:
+  - **Data**: diff records on any form between two connections (e.g. `CTM:Support Group`,
+    `CTM:People`, `CTM:Company`), matched by a key field. Optional Company filter accepts a
+    single name, a comma-separated list (OR'd), or a wildcard with `*` (e.g. `Germania*`).
+  - **Schema**: diff a form's *field definitions* between environments instead of its data —
+    catches things like a custom field that exists in Dev but hasn't been promoted to Prod.
+  - Results render as a table (added/removed/modified rows always visible, no clicking
+    required; matched/unchanged records collapse behind a toggle since they're usually the
+    bulk of the data and not what you're there to look at).
 - **Forms & Fields** — look up a form's field definitions
 - **Menus** — look up a specific menu's definition by exact name
-- **Diagnostics** — probe which forms are reachable via the REST API on a given instance
+- **Diagnostics** — probe which forms are reachable via the REST API on a given instance,
+  including a custom-probe box for testing your own candidate form names
 
 ## A REST API limitation worth knowing
 

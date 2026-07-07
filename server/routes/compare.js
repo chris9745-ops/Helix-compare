@@ -19,12 +19,20 @@ function resolveConn(id, label) {
   return conn;
 }
 
+// Normalizes BMC's various "list" response shapes into a flat array. Used for
+// both entry responses ({ entries: [{ values: {...} }] }) and field-metadata
+// responses (shape unverified across BMC versions — could be an array, or
+// wrapped in { fields } / { items }).
+function normalizeList(data) {
+  const arr = Array.isArray(data) ? data : (data?.entries || data?.fields || data?.items || []);
+  return arr.map(e => e?.values || e);
+}
+
 // POST /api/compare/data — generic ITSM configuration/reference data diff.
 // Works against any form (e.g. CTM:Category, CTM:Support Group, CTM:People
-// Organization). This is the only compare mode: Active Links, Filters,
-// Escalations aren't exposed by BMC's REST API at all, and Menus only
-// supports lookup-by-known-name, not bulk listing — so entries are the only
-// object type that can be diffed wholesale between two environments.
+// Organization). Entries are the one BMC REST resource that supports real
+// bulk listing/searching — Active Links, Filters, Escalations aren't exposed
+// via REST at all, and Menus only support lookup-by-known-name.
 router.post('/data', async (req, res) => {
   const { leftConnId, rightConnId, formName, keyField, qLeft, qRight, fields } = req.body;
   if (!formName) return res.status(400).json({ error: 'formName is required' });
@@ -38,9 +46,29 @@ router.post('/data', async (req, res) => {
     helix.queryEntries(rightConn, formName, { q: qRight, fields, limit: 1000 })
   ]);
 
-  const normalize = (data) => (data.entries || data || []).map(e => e.values || e);
+  const result = diffByKey(normalizeList(leftData), normalizeList(rightData), keyField);
+  res.json(result);
+});
 
-  const result = diffByKey(normalize(leftData), normalize(rightData), keyField);
+// POST /api/compare/fields — diff a form's FIELD DEFINITIONS (schema) rather
+// than its data, e.g. to catch a custom field that exists in Dev but hasn't
+// been promoted to Prod yet. Uses the same generic key-based diff engine —
+// key field is user-specified since the exact response shape from BMC's
+// /fields/{form} endpoint isn't fully verified across versions.
+router.post('/fields', async (req, res) => {
+  const { leftConnId, rightConnId, formName, keyField } = req.body;
+  if (!formName) return res.status(400).json({ error: 'formName is required' });
+  if (!keyField) return res.status(400).json({ error: 'keyField is required' });
+
+  const leftConn = resolveConn(leftConnId, 'Left');
+  const rightConn = resolveConn(rightConnId, 'Right');
+
+  const [leftData, rightData] = await Promise.all([
+    helix.getFormFields(leftConn, formName),
+    helix.getFormFields(rightConn, formName)
+  ]);
+
+  const result = diffByKey(normalizeList(leftData), normalizeList(rightData), keyField);
   res.json(result);
 });
 
