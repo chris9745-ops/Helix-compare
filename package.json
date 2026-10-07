@@ -33,7 +33,7 @@
     "concurrently": "^8.2.2",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
-    "firebase-admin": "^14.5.0",
+    "firebase-admin": "^13.10.0",
     "serverless-http": "^4.0.0"
   },
   "build": {

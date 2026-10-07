@@ -6,14 +6,15 @@
   functions = "netlify/functions"
 
   [build.environment]
-    # firebase-admin 14 and @google-cloud/firestore 9 require Node >= 22. The
-    # function runtime follows this version by default.
     NODE_VERSION = "22"
     # The Firebase *web* config is public by design (it ships in the browser
     # bundle). Tell Netlify's secret scanner not to fail the build over it.
     SECRETS_SCAN_OMIT_KEYS = "VITE_AUTH_MODE,VITE_FIREBASE_API_KEY,VITE_FIREBASE_AUTH_DOMAIN,VITE_FIREBASE_PROJECT_ID,VITE_FIREBASE_APP_ID"
 
 [functions]
+  # KEEP firebase-admin ON 13.x (see package.json). v14 pulls in jwks-rsa 4 -> jose 6, which is
+  # ESM-only; Netlify's function runtime can't require() it, so every sign-in fails with
+  # ERR_REQUIRE_ESM. `npm test` has a check that catches an accidental upgrade.
   node_bundler = "esbuild"
   # firebase-admin has dynamic requires that don't bundle cleanly; ship it as-is.
   external_node_modules = ["firebase-admin"]
