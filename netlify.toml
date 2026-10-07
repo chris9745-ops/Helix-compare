@@ -6,7 +6,9 @@
   functions = "netlify/functions"
 
   [build.environment]
-    NODE_VERSION = "20"
+    # firebase-admin 14 and @google-cloud/firestore 9 require Node >= 22. The
+    # function runtime follows this version by default.
+    NODE_VERSION = "22"
     # The Firebase *web* config is public by design (it ships in the browser
     # bundle). Tell Netlify's secret scanner not to fail the build over it.
     SECRETS_SCAN_OMIT_KEYS = "VITE_AUTH_MODE,VITE_FIREBASE_API_KEY,VITE_FIREBASE_AUTH_DOMAIN,VITE_FIREBASE_PROJECT_ID,VITE_FIREBASE_APP_ID"

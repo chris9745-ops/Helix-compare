@@ -161,3 +161,4 @@ shouldn't leave a laptop.
 | *"Your session expired — sign in again"* in a loop | Check the site and Firebase project IDs match (`FIREBASE_PROJECT_ID` vs `VITE_FIREBASE_PROJECT_ID`). |
 | Build fails complaining about secrets in the output | `netlify.toml` already omits the public Firebase web keys from scanning; make sure you didn't mark a `VITE_*` value as secret or add other values that appear in the bundle. |
 | Compare fails with a timeout / 502 | See *Request time* above. |
+| `/api/*` returns a 502 / "function error" right after a deploy, and the function log mentions syntax errors or an unsupported Node version | The Firebase libraries need Node 22+. `netlify.toml` pins `NODE_VERSION = "22"`; if the function still runs on an older runtime, add the environment variable `AWS_LAMBDA_JS_RUNTIME=nodejs22.x` (Functions scope) and redeploy. |
