@@ -12,6 +12,7 @@ const { getDb } = require('../firebaseAdmin');
 const { encrypt, decrypt } = require('../crypto');
 
 const connections = (ownerId) => getDb().collection('users').doc(ownerId).collection('connections');
+const formLists = (ownerId) => getDb().collection('users').doc(ownerId).collection('formLists');
 const aad = (ownerId, id) => `${ownerId}:${id}`;
 
 const publicView = ({ passwordEnc, ...safe }) => safe;
@@ -67,6 +68,22 @@ module.exports = {
 
   async delete(ownerId, id) {
     await connections(ownerId).doc(String(id)).delete();
+    await formLists(ownerId).doc(String(id)).delete();
     return true;
+  },
+
+  // Form list imported from the Mid-Tier object list: { text, importedAt } or null.
+  // Separate collection so the large list isn't loaded with every connection read.
+  async getFormList(ownerId, id) {
+    const snap = await formLists(ownerId).doc(String(id)).get();
+    return snap.exists ? snap.data() : null;
+  },
+
+  async setFormList(ownerId, id, { text, importedAt }) {
+    await formLists(ownerId).doc(String(id)).set({ text, importedAt });
+  },
+
+  async deleteFormList(ownerId, id) {
+    await formLists(ownerId).doc(String(id)).delete();
   }
 };

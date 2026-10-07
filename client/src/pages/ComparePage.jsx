@@ -1,22 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getConnections, getCompanies, compareData, compareFields } from '../lib/api';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
+import { DATA_PRESETS } from '../lib/presets';
+import { useFormNames } from '../lib/useFormNames';
 import styles from './ComparePage.module.css';
-
-// Common starting points only — exact form/field names vary across ITSM
-// versions and modules, so these are meant to be edited, not trusted blindly.
-const DATA_PRESETS = [
-  { label: 'Support Groups', formName: 'CTM:Support Group', keyField: 'Support Group Name' },
-  { label: 'People', formName: 'CTM:People', keyField: 'Remedy Login ID' },
-  { label: 'Company', formName: 'CTM:Company', keyField: 'Company Name' },
-  { label: 'Operational Categorization', formName: 'CFG:Categorization', keyField: 'Name' },
-  { label: 'Service Requests', formName: 'SRM:Request', keyField: 'Request Number' },
-  { label: 'Incidents', formName: 'HPD:Help Desk', keyField: 'Incident Number' },
-  { label: 'Changes', formName: 'CHG:Infrastructure Change', keyField: 'Infrastructure Change ID' },
-  { label: 'Problems', formName: 'PBM:Problem Investigation', keyField: 'Problem Investigation ID' },
-];
 
 // A company value can be: blank (no filter), a single name, a comma-separated
 // list (OR'd together), or contain * / % for a LIKE-style wildcard match.
@@ -35,6 +24,14 @@ function buildCompanyQualification(raw) {
   });
 
   return clauses.length > 1 ? clauses.map(c => `(${c})`).join(' OR ') : clauses[0];
+}
+
+// Join several qualifications with AND. Each is parenthesised so an OR inside one
+// (e.g. a company list) can't change the meaning of the whole.
+function combineQualifications(...parts) {
+  const present = parts.map(p => (p || '').trim()).filter(Boolean);
+  if (!present.length) return undefined;
+  return present.length === 1 ? present[0] : present.map(p => `(${p})`).join(' AND ');
 }
 
 function formatVal(v) {
@@ -153,7 +150,12 @@ export default function ComparePage() {
   const [keyField, setKeyField] = useState('');
   const [company, setCompany] = useState('');
   const [fields, setFields] = useState('');
+  const [qualification, setQualification] = useState('');
   const [showUnchanged, setShowUnchanged] = useState(false);
+
+  const { names: formNames } = useFormNames(leftConnId);
+  // Thousands of options: build them once, not on every keystroke
+  const formOptions = useMemo(() => formNames.map(n => <option key={n} value={n} />), [formNames]);
 
   const { data: companiesData, error: companiesError } = useQuery({
     queryKey: ['companies', leftConnId],
@@ -175,7 +177,8 @@ export default function ComparePage() {
       fieldsMutation.mutate({ leftConnId, rightConnId, formName, keyField });
       return;
     }
-    const q = buildCompanyQualification(company);
+    // Same qualification on both sides: company filter AND any extra qualification
+    const q = combineQualifications(buildCompanyQualification(company), qualification);
     const fieldList = fields.split(',').map(f => f.trim()).filter(Boolean);
     if (fieldList.length && !fieldList.includes(keyField)) fieldList.unshift(keyField);
     const fieldsParam = fieldList.length ? `values(${fieldList.join(',')})` : undefined;
@@ -228,7 +231,7 @@ export default function ComparePage() {
             }}
           />
           <datalist id="data-presets">
-            {DATA_PRESETS.map(p => <option key={p.formName} value={p.formName}>{p.label}</option>)}
+            {formOptions}
           </datalist>
           <input
             className={styles.input}
@@ -257,6 +260,17 @@ export default function ComparePage() {
           <div className={styles.optionsRow}>
             <input
               className={styles.input}
+              placeholder={`Extra qualification (optional) — e.g. 'Status' = "Enabled". Needed if your Helix server refuses searches with no qualification.`}
+              value={qualification}
+              onChange={e => setQualification(e.target.value)}
+            />
+          </div>
+        )}
+
+        {source === 'data' && (
+          <div className={styles.optionsRow}>
+            <input
+              className={styles.input}
               placeholder="Fields to compare (optional, comma-separated — leave blank to use BMC's default set)…"
               value={fields}
               onChange={e => setFields(e.target.value)}
@@ -267,7 +281,7 @@ export default function ComparePage() {
         <div className={styles.hint}>
           Presets are common starting points — exact form/field names vary by ITSM version. Confirm with the Forms browser or Diagnostics page first.
           {source === 'data' && <> Company filter assumes a standard <code className={styles.hintCode}>Company</code> field; use commas for multiple companies or <code className={styles.hintCode}>*</code> for a wildcard (e.g. <code className={styles.hintCode}>Germania*</code>).</>}
-          {source === 'data' && leftConnId && companiesError && ' Could not load a company list from the left connection (CTM:Company not found?) — type the name manually.'}
+          {source === 'data' && leftConnId && companiesError && ' Could not load a company list from the left connection (CTM:Company not found, or the server refuses unqualified searches) — type the name manually.'}
           {source === 'data' && ' If a comparison shows no difference you know should exist, list the specific field(s) above — without it, BMC may only return a default subset of fields.'}
           {source === 'schema' && ' The exact shape of BMC\'s field-metadata response varies by version — if the key field you enter isn\'t found, check what a raw field-list response actually looks like first.'}
         </div>

@@ -21,7 +21,12 @@ from one codebase:
   - Results render as a table (added/removed/modified rows always visible, no clicking
     required; matched/unchanged records collapse behind a toggle since they're usually the
     bulk of the data and not what you're there to look at).
-- **Forms & Fields** — look up a form's field definitions
+- **Forms & Fields** — look up a form's field definitions by its exact name (BMC's REST API has no
+  "list all forms" call). Columns are built from whatever the server returns.
+  - **Form-list import:** the Mid-Tier's own "AR System Object List" screen (`…/arsys/forms`) does list every
+    form — with **Show Hidden** ticked, thousands of them. Copy that table once per environment and paste it into
+    the import panel; it's stored with the connection and powers typeahead in every form-name box (Forms &
+    Fields, Compare). Handles tab-separated rows, one-cell-per-line copies, extra columns, and stray page text.
 - **Menus** — look up a specific menu's definition by exact name
 - **Diagnostics** — probe which forms are reachable via the REST API on a given instance,
   including a custom-probe box for testing your own candidate form names
@@ -34,6 +39,11 @@ those workflow objects only exist in the classic AR System native-protocol API t
 Developer Studio speaks (a different port, not HTTP/REST). This tool can't browse or
 compare those objects as a result; comparing workflow customizations between
 environments still requires Developer Studio's `.def` export, or `arexportcmd`.
+
+This was tested directly against a Helix 26.2 (container-based) server: the older "AR System Metadata:*"
+forms (`arschema`, `field`, `actlink`, `filter`, `escalation`) that some on-prem versions expose as ordinary
+records all return "Form does not exist on server", and BMC's own article says that technique doesn't apply to
+21.05+ container environments. So there is no REST route to the form list or to workflow objects there.
 
 Similarly, **Menus** only support lookup by exact known name — there's no bulk-list
 endpoint, so unlike entries there's no way to enumerate "all menus" without another
@@ -171,8 +181,6 @@ through Electron's `safeStorage` API) would be the next thing to add.
 
 ## Roadmap
 
-- [ ] Verify `getForms()` (list-all-forms) and `getFormSchema()` against a real instance —
-      likely have the same wrong-endpoint issue `getFormFields()` had before it was fixed
 - [ ] `.def` file upload + diff, as the real path to comparing workflow objects
 - [ ] Saved compare presets (form name + key field) per connection pair
 - [ ] Custom app icon (currently the default Electron icon) and code signing for a warning-free install

@@ -14,30 +14,11 @@ router.use(async (req, res, next) => {
   next();
 });
 
-// ── Forms / Schema ────────────────────────────────────────────────────────
-
-router.get('/forms', async (req, res) => {
-  const data = await helix.getForms(req.helixConn);
-  res.json(data);
-});
-
-router.get('/forms/:formName', async (req, res) => {
-  const data = await helix.getFormSchema(req.helixConn, req.params.formName);
-  res.json(data);
-});
+// ── Form fields ───────────────────────────────────────────────────────────
+// Only lookup-by-form-name exists in BMC's REST API (no "list all forms").
 
 router.get('/forms/:formName/fields', async (req, res) => {
   const data = await helix.getFormFields(req.helixConn, req.params.formName);
-  res.json(data);
-});
-
-router.post('/forms/:formName/fields', async (req, res) => {
-  const data = await helix.createField(req.helixConn, req.params.formName, req.body);
-  res.status(201).json(data);
-});
-
-router.put('/forms/:formName/fields/:fieldId', async (req, res) => {
-  const data = await helix.updateField(req.helixConn, req.params.formName, req.params.fieldId, req.body);
   res.json(data);
 });
 

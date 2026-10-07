@@ -36,16 +36,18 @@ export const deleteConnection = (id) => api.delete(`/connections/${id}`);
 export const testConnection = (id) => api.post(`/connections/${id}/test`).then(r => r.data);
 
 // ── Forms ──────────────────────────────────────────────────────────────────
-export const getForms = () =>
-  api.get('/helix/forms').then(r => r.data);
-export const getFormSchema = (formName) =>
-  api.get(`/helix/forms/${encodeURIComponent(formName)}`).then(r => r.data);
+// BMC's REST API can't list every form on a server — only fetch the fields of a
+// form you name.
 export const getFormFields = (formName) =>
   api.get(`/helix/forms/${encodeURIComponent(formName)}/fields`).then(r => r.data);
-export const createField = (formName, def) =>
-  api.post(`/helix/forms/${encodeURIComponent(formName)}/fields`, def).then(r => r.data);
-export const updateField = (formName, fieldId, def) =>
-  api.put(`/helix/forms/${encodeURIComponent(formName)}/fields/${fieldId}`, def).then(r => r.data);
+
+// ── Imported form list (pasted from the Mid-Tier "AR System Object List") ────
+export const getFormList = (connId) =>
+  api.get(`/connections/${connId}/forms`).then(r => r.data);
+export const importFormList = (connId, text) =>
+  api.put(`/connections/${connId}/forms`, { text }).then(r => r.data);
+export const clearFormList = (connId) =>
+  api.delete(`/connections/${connId}/forms`);
 
 // ── Menus ──────────────────────────────────────────────────────────────────
 // No bulk-list endpoint — lookup by exact known menu name only.

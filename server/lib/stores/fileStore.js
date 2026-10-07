@@ -17,6 +17,11 @@ fs.mkdirSync(dataDir, { recursive: true });
 const db = low(new FileSync(path.join(dataDir, 'connections.json')));
 db.defaults({ connections: [] }).write();
 
+// Imported form lists live in their own file so the (large) lists don't ride
+// along on every connection read.
+const lists = low(new FileSync(path.join(dataDir, 'formlists.json')));
+lists.defaults({ lists: {} }).write();
+
 const stripPassword = ({ password, ...safe }) => safe;
 
 module.exports = {
@@ -54,6 +59,20 @@ module.exports = {
 
   async delete(_ownerId, id) {
     db.get('connections').remove({ id }).write();
+    lists.unset(['lists', id]).write();
     return true;
+  },
+
+  // Form list imported from the Mid-Tier object list: { text, importedAt } or null
+  async getFormList(_ownerId, id) {
+    return lists.get(['lists', id]).value() || null;
+  },
+
+  async setFormList(_ownerId, id, { text, importedAt }) {
+    lists.set(['lists', id], { text, importedAt }).write();
+  },
+
+  async deleteFormList(_ownerId, id) {
+    lists.unset(['lists', id]).write();
   }
 };

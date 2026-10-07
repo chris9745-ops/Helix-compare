@@ -106,7 +106,7 @@ test('token failures are reported honestly: sign-in problems vs server problems'
 });
 
 test('every protected route family rejects anonymous callers', async () => {
-  for (const [m, p] of [['GET', '/api/me'], ['POST', '/api/connections'], ['GET', '/api/helix/forms'],
+  for (const [m, p] of [['GET', '/api/me'], ['POST', '/api/connections'], ['GET', '/api/helix/forms/X/fields'],
                         ['POST', '/api/compare/data'], ['GET', '/api/helix/diagnostic']]) {
     assert.equal((await call(m, p)).status, 401, `${m} ${p}`);
   }
@@ -137,7 +137,7 @@ test('users only see and use their own connections', async () => {
   assert.equal(cmp.status, 404);
   assert.match(cmp.json.error, /Left connection not found/);
 
-  const res = await fetch(`${base}/api/helix/forms`, { headers: { authorization: 'Bearer bob-token', 'x-connection-id': aliceId } });
+  const res = await fetch(`${base}/api/helix/forms/X/fields`, { headers: { authorization: 'Bearer bob-token', 'x-connection-id': aliceId } });
   assert.equal(res.status, 404);
 });
 
@@ -210,4 +210,29 @@ test('an empty allowlist locks everyone out', async () => {
   } finally {
     process.env.ALLOWED_EMAILS = saved;
   }
+});
+
+test('imported form lists are per user and stored under the owner', async () => {
+  const mk = async (token, name) => (await call('POST', '/api/connections', { token, body: conn(name) })).json.id;
+  const aliceConn = await mk('alice-token', 'FL-Alice');
+
+  const put = await call('PUT', `/api/connections/${aliceConn}/forms`, { token: 'alice-token', body: { text: 'HPD:Help Desk\nCTM:People' } });
+  assert.equal(put.status, 200);
+  assert.equal(put.json.count, 2);
+
+  const mine = await call('GET', `/api/connections/${aliceConn}/forms`, { token: 'alice-token' });
+  assert.deepEqual(mine.json.forms.map(f => f.name), ['CTM:People', 'HPD:Help Desk']);
+
+  // Bob can neither read, overwrite, nor clear Alice's list
+  assert.equal((await call('GET', `/api/connections/${aliceConn}/forms`, { token: 'bob-token' })).status, 404);
+  assert.equal((await call('PUT', `/api/connections/${aliceConn}/forms`, { token: 'bob-token', body: { text: 'X:Y' } })).status, 404);
+  assert.equal((await call('DELETE', `/api/connections/${aliceConn}/forms`, { token: 'bob-token' })).status, 404);
+  assert.equal((await call('GET', `/api/connections/${aliceConn}/forms`, { token: 'alice-token' })).json.forms.length, 2);
+
+  // Anonymous callers are refused outright
+  assert.equal((await call('GET', `/api/connections/${aliceConn}/forms`)).status, 401);
+
+  // Deleting the connection cleans up the list document too
+  await call('DELETE', `/api/connections/${aliceConn}`, { token: 'alice-token' });
+  assert.equal(db._data.has(`users/uid-alice/formLists/${aliceConn}`), false);
 });
