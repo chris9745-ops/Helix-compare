@@ -26,7 +26,19 @@ const TOKENS = {
   'mallory-token': { uid: 'uid-mallory', email: 'mallory@evil.com', email_verified: true },
   'unverified-token': { uid: 'uid-alice', email: 'alice@example.com', email_verified: false }
 };
-const verifyIdToken = async (t) => { if (!TOKENS[t]) throw new Error('bad token'); return TOKENS[t]; };
+// How firebase-admin actually fails (codes/messages observed from the real SDK)
+const fbError = (code, message) => Object.assign(new Error(message), { code });
+const FAILURES = {
+  'expired-token': fbError('auth/id-token-expired', 'Firebase ID token has expired.'),
+  'wrong-project-token': fbError('auth/argument-error', 'Firebase ID token has incorrect "aud" (audience) claim. Expected "a" but got "b".'),
+  'keyfetch-token': fbError('auth/internal-error', 'Error while making request: getaddrinfo ENOTFOUND www.googleapis.com'),
+  'crash-token': new TypeError('something exploded inside the SDK')
+};
+const verifyIdToken = async (t) => {
+  if (FAILURES[t]) throw FAILURES[t];
+  if (!TOKENS[t]) throw fbError('auth/argument-error', 'Decoding Firebase ID token failed.');
+  return TOKENS[t];
+};
 
 let server, base;
 test.before(async () => {
@@ -63,6 +75,34 @@ test('everything else requires a valid, allowlisted, verified identity', async (
 
   assert.equal((await call('GET', '/api/connections', { token: 'unverified-token' })).status, 403);
   assert.equal((await call('GET', '/api/me', { token: 'alice-token' })).status, 200);
+});
+
+test('token failures are reported honestly: sign-in problems vs server problems', async () => {
+  const get = (token) => call('GET', '/api/connections', { token });
+
+  const expired = await get('expired-token');
+  assert.equal(expired.status, 401);
+  assert.match(expired.json.error, /session expired/);
+
+  const garbage = await get('garbage');
+  assert.equal(garbage.status, 401);
+  assert.equal(garbage.json.code, 'unauthenticated');
+
+  // The user can't fix these by signing in again, so they must NOT say "sign in again"
+  const mismatch = await get('wrong-project-token');
+  assert.equal(mismatch.status, 500);
+  assert.equal(mismatch.json.code, 'misconfigured');
+  assert.match(mismatch.json.error, /FIREBASE_PROJECT_ID/);
+  assert.doesNotMatch(mismatch.json.error, /sign in again/i);
+
+  const keyfetch = await get('keyfetch-token');
+  assert.equal(keyfetch.status, 500);
+  assert.equal(keyfetch.json.code, 'verification_unavailable');
+
+  const crash = await get('crash-token');
+  assert.equal(crash.status, 500);
+  assert.equal(crash.json.code, 'verification_unavailable');
+  assert.doesNotMatch(crash.json.error, /sign in again/i);
 });
 
 test('every protected route family rejects anonymous callers', async () => {

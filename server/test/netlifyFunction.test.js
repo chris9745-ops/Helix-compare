@@ -80,3 +80,21 @@ test('with a valid Firebase key, a garbage bearer token is a clean 401', async (
   assert.equal(res.statusCode, 401);
   assert.equal(JSON.parse(res.body).code, 'unauthenticated');
 });
+
+test('with the real SDK, a token from a different Firebase project is a clear config error', async () => {
+  // Same module graph as the previous test (valid key, FIREBASE_PROJECT_ID=test-project)
+  const { handler: fresh } = require('../../netlify/functions/api');
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const wrongProject = [
+    b64({ alg: 'RS256', kid: 'abc', typ: 'JWT' }),
+    b64({ aud: 'some-other-project', iss: 'https://securetoken.google.com/some-other-project', sub: 'u1', iat: now - 10, exp: now + 3600, auth_time: now - 10 }),
+    'sig'
+  ].join('.');
+
+  const res = await fresh(event('/api/connections', { headers: { authorization: `Bearer ${wrongProject}` } }), {});
+  assert.equal(res.statusCode, 500);
+  const body = JSON.parse(res.body);
+  assert.equal(body.code, 'misconfigured');
+  assert.match(body.error, /FIREBASE_PROJECT_ID/);
+});

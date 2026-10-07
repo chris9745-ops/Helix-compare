@@ -7,6 +7,36 @@
 
 const { isHosted, hostedConfigProblems, isEmailAllowed } = require('../config');
 
+// Turn a token-verification failure into the right HTTP response. Only genuine
+// token problems may say "sign in again"; deploy/config/runtime problems must say
+// so, otherwise people loop re-signing-in against a broken server.
+function classifyVerifyError(err) {
+  const code = err && err.code;
+  const message = String((err && err.message) || '');
+
+  if (code === 'auth/id-token-expired') {
+    return { status: 401, code: 'unauthenticated', error: 'Your session expired — sign in again' };
+  }
+  // Token was issued by a different Firebase project than the server is set up for
+  if (/incorrect "(aud|iss)"/.test(message)) {
+    return {
+      status: 500,
+      code: 'misconfigured',
+      error: 'Sign-in project mismatch: FIREBASE_PROJECT_ID on the server does not match the Firebase project in the site\'s web config (VITE_FIREBASE_PROJECT_ID). Fix the variable and redeploy.'
+    };
+  }
+  // Other Firebase *token* errors (garbage, bad signature, revoked…) — the user can fix by signing in again.
+  // auth/internal-error means the SDK couldn't do its job (e.g. couldn't fetch Google's signing keys): a server problem.
+  if (typeof code === 'string' && code.startsWith('auth/') && code !== 'auth/internal-error') {
+    return { status: 401, code: 'unauthenticated', error: "Couldn't verify your sign-in — sign in again" };
+  }
+  return {
+    status: 500,
+    code: 'verification_unavailable',
+    error: 'The server could not verify your sign-in (server error) — check the Netlify function logs'
+  };
+}
+
 function createAuthMiddleware({ verifyIdToken } = {}) {
   return async function authenticate(req, res, next) {
     if (!isHosted()) {
@@ -47,8 +77,10 @@ function createAuthMiddleware({ verifyIdToken } = {}) {
     let decoded;
     try {
       decoded = await verify(match[1]);
-    } catch {
-      return res.status(401).json({ error: 'Your session expired — sign in again', code: 'unauthenticated' });
+    } catch (err) {
+      console.error('[auth] token verification failed:', err && err.code, '-', err && err.message);
+      const { status, ...body } = classifyVerifyError(err);
+      return res.status(status).json(body);
     }
 
     if (!decoded.email_verified || !isEmailAllowed(decoded.email)) {
@@ -63,4 +95,4 @@ function createAuthMiddleware({ verifyIdToken } = {}) {
   };
 }
 
-module.exports = { createAuthMiddleware };
+module.exports = { createAuthMiddleware, classifyVerifyError };
