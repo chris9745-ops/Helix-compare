@@ -138,6 +138,33 @@
   border-top: 1px solid var(--border);
 }
 
+.userRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.userEmail {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.signOut {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.signOut:hover { background: var(--bg-hover); color: var(--text-primary); }
+
 .version {
   font-size: 10px;
   color: var(--text-muted);

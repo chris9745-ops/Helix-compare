@@ -7,3 +7,9 @@ release/
 .env
 *.log
 .DS_Store
+
+# Hosted deploy tooling
+.netlify/
+.firebase/
+firebase-debug.log
+.env.*

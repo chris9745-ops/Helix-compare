@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // All reads/writes go through the Netlify function using the Admin SDK,
+    // which bypasses these rules. So deny every direct client access — nothing
+    // in a browser should ever touch these documents (they hold encrypted
+    // Helix credentials).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

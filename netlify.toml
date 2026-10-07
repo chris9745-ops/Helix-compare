@@ -1,0 +1,29 @@
+# Netlify build + routing config. Pushing to GitHub triggers a deploy.
+
+[build]
+  command   = "npm run build:client"
+  publish   = "client/dist"
+  functions = "netlify/functions"
+
+  [build.environment]
+    NODE_VERSION = "20"
+    # The Firebase *web* config is public by design (it ships in the browser
+    # bundle). Tell Netlify's secret scanner not to fail the build over it.
+    SECRETS_SCAN_OMIT_KEYS = "VITE_AUTH_MODE,VITE_FIREBASE_API_KEY,VITE_FIREBASE_AUTH_DOMAIN,VITE_FIREBASE_PROJECT_ID,VITE_FIREBASE_APP_ID"
+
+[functions]
+  node_bundler = "esbuild"
+  # firebase-admin has dynamic requires that don't bundle cleanly; ship it as-is.
+  external_node_modules = ["firebase-admin"]
+
+# API calls go to the single Express-backed function
+[[redirects]]
+  from   = "/api/*"
+  to     = "/.netlify/functions/api/:splat"
+  status = 200
+
+# Single-page app: any other path serves index.html (React Router handles it)
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

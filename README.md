@@ -1,9 +1,13 @@
 # Helix Dev Tool
 
 A tool for comparing BMC Helix ITSM configuration/reference data between two
-environments (e.g. Dev vs Prod), plus a light schema browser. Runs as a local
-web app in dev mode, or packages into a real desktop app (Mac/Windows) — see
-[Packaging as a desktop app](#packaging-as-a-desktop-app) below.
+environments (e.g. Dev vs Prod), plus a light schema browser. It runs three ways
+from one codebase:
+
+- **Dev** — `npm run dev`, local web app, no login
+- **Desktop app** — Mac/Windows installers, see [Packaging as a desktop app](#packaging-as-a-desktop-app)
+- **Hosted site** — Netlify + Firebase (Google sign-in, per-user encrypted connections),
+  updated with `git push`. See **[DEPLOY.md](DEPLOY.md)**.
 
 ## What it does
 
@@ -76,14 +80,23 @@ If you're not sure of a form's exact name/fields, check **Forms & Fields** or ru
 helix-dev-tool/
 ├── electron/              # Electron main process (packaged desktop app entry point)
 │   └── main.js
+├── netlify/functions/api.js   # Hosted entry point: wraps the Express app as a Netlify Function
+├── netlify.toml · firebase.json · firestore.rules   # Hosted deploy config
 ├── server/               # Express backend
-│   ├── index.js          # Entry point — also serves client/dist in production
+│   ├── app.js            # createApp() — shared by local, Electron, and Netlify
+│   ├── index.js          # Local/desktop entry point — also serves client/dist
+│   ├── config.js         # local vs hosted mode, allowlist
+│   ├── middleware/       # auth (Firebase ID token + allowlist), error handler
+│   ├── test/             # `npm test` (node:test, no extra dependencies)
 │   ├── routes/
 │   │   ├── connections.js  # Connection CRUD
 │   │   ├── helix.js        # Forms/Fields/Menus + diagnostic probe
 │   │   └── compare.js      # Entry-diff endpoint
 │   ├── lib/
-│   │   ├── connectionStore.js  # lowdb persistence (path configurable via HELIX_DATA_DIR)
+│   │   ├── connectionStore.js  # picks the store for the mode:
+│   │   ├── stores/fileStore.js       #   local: lowdb JSON (path via HELIX_DATA_DIR)
+│   │   ├── stores/firestoreStore.js  #   hosted: Firestore, per user, passwords encrypted
+│   │   ├── crypto.js · urlGuard.js · firebaseAdmin.js
 │   │   ├── helixClient.js      # JWT auth + REST calls
 │   │   └── diff.js             # Generic key-based + deep diff
 │   └── data/

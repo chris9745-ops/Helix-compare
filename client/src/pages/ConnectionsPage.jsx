@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getConnections, createConnection, deleteConnection, testConnection } from '../lib/api';
 import { useAppStore } from '../lib/store';
+import { useAuthUser } from '../components/AuthGate';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
 import styles from './ConnectionsPage.module.css';
@@ -11,6 +12,7 @@ function ConnectionForm({ onSave, onCancel }) {
     name: '', baseUrl: '', username: '', password: '', authString: '', ignoreSSL: false
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const hosted = useAuthUser()?.hosted;
 
   const qc = useQueryClient();
   const { mutate, isPending, error } = useMutation({
@@ -53,10 +55,12 @@ function ConnectionForm({ onSave, onCancel }) {
             onChange={e => set('authString', e.target.value)}
           />
         </label>
-        <label className={styles.checkField}>
-          <input type="checkbox" checked={form.ignoreSSL} onChange={e => set('ignoreSSL', e.target.checked)} />
-          <span>Ignore SSL certificate errors (self-signed / dev instances)</span>
-        </label>
+        {!hosted && (
+          <label className={styles.checkField}>
+            <input type="checkbox" checked={form.ignoreSSL} onChange={e => set('ignoreSSL', e.target.checked)} />
+            <span>Ignore SSL certificate errors (self-signed / dev instances)</span>
+          </label>
+        )}
       </div>
       <div className={styles.formActions}>
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>

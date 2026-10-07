@@ -3,11 +3,12 @@ const router = express.Router();
 const store = require('../lib/connectionStore');
 const helix = require('../lib/helixClient');
 
-// Middleware: resolve connection from header
-router.use((req, res, next) => {
+// Middleware: resolve the caller's connection from the header. Looked up under
+// the signed-in user (req.user), so one user can't use another's connection.
+router.use(async (req, res, next) => {
   const connId = req.headers['x-connection-id'];
   if (!connId) return res.status(400).json({ error: 'X-Connection-Id header required' });
-  const conn = store.getById(connId);
+  const conn = await store.getById(req.user.uid, connId);
   if (!conn) return res.status(404).json({ error: 'Connection not found' });
   req.helixConn = conn;
   next();

@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../lib/store';
 import { getConnections } from '../lib/api';
+import { useAuthUser } from './AuthGate';
 import styles from './Shell.module.css';
 
 const NAV = [
@@ -18,6 +19,7 @@ const NAV = [
 export default function Shell() {
   const { activeConnectionId, setActiveConnection } = useAppStore();
   const navigate = useNavigate();
+  const authUser = useAuthUser();
 
   const { data: connections = [] } = useQuery({
     queryKey: ['connections'],
@@ -78,6 +80,12 @@ export default function Shell() {
         </nav>
 
         <div className={styles.sidebarFooter}>
+          {authUser && (
+            <div className={styles.userRow}>
+              <span className={styles.userEmail} title={authUser.email}>{authUser.email}</span>
+              <button className={styles.signOut} onClick={authUser.signOut}>Sign out</button>
+            </div>
+          )}
           <span className={styles.version}>v1.0.0 · Helix 25+</span>
         </div>
       </aside>

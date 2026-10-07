@@ -4,7 +4,10 @@
   "description": "BMC Helix configuration compare tool",
   "private": true,
   "main": "electron/main.js",
-  "workspaces": ["server", "client"],
+  "workspaces": [
+    "server",
+    "client"
+  ],
   "scripts": {
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
@@ -13,7 +16,8 @@
     "electron": "npm run build:client && electron .",
     "dist:mac": "npm run build:client && electron-builder --mac",
     "dist:win": "npm run build:client && electron-builder --win --x64 --arm64",
-    "dist": "npm run build:client && electron-builder --mac && electron-builder --win --x64 --arm64"
+    "dist": "npm run build:client && electron-builder --mac && electron-builder --win --x64 --arm64",
+    "test": "node --test server/test/*.test.js"
   },
   "dependencies": {
     "axios": "^1.6.7",
@@ -21,14 +25,16 @@
     "express": "^4.18.2",
     "express-async-errors": "^3.1.1",
     "helmet": "^7.1.0",
-    "morgan": "^1.10.0",
     "lowdb": "^1.0.0",
+    "morgan": "^1.10.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
     "electron": "^33.2.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "firebase-admin": "^14.5.0",
+    "serverless-http": "^4.0.0"
   },
   "build": {
     "appId": "com.nimbusnow.helixdevtool",
@@ -38,6 +44,7 @@
       "server/**/*",
       "client/dist/**/*",
       "!server/data/**",
+      "!server/test/**",
       "!**/*.map"
     ],
     "directories": {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '../lib/store';
+import { runDiagnostic } from '../lib/api';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
 import styles from './DiagnosticPage.module.css';
@@ -16,16 +17,10 @@ export default function DiagnosticPage() {
     setError(null);
     setResults(null);
     try {
-      const url = forms
-        ? `/api/helix/diagnostic?forms=${encodeURIComponent(forms)}`
-        : '/api/helix/diagnostic';
-      const res = await fetch(url, {
-        headers: { 'X-Connection-Id': activeConnectionId }
-      });
-      const data = await res.json();
+      const data = await runDiagnostic(forms);
       setResults(data.results);
     } catch (e) {
-      setError(e.message);
+      setError(e.response?.data?.error || e.message);
     } finally {
       setLoading(false);
     }

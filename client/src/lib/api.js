@@ -1,7 +1,18 @@
 import axios from 'axios';
 import { useAppStore } from './store';
+import { AUTH_ENABLED, getIdToken } from './auth';
 
 const api = axios.create({ baseURL: '/api' });
+
+// Hosted site: attach the signed-in user's Firebase ID token to every API call.
+// (Desktop/dev builds have AUTH_ENABLED=false and skip this entirely.)
+api.interceptors.request.use(async (config) => {
+  if (AUTH_ENABLED) {
+    const token = await getIdToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 // Inject connection ID header for all helix requests — unless the caller
 // already set one explicitly (e.g. Compare's per-side connection pickers,
@@ -13,6 +24,9 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// ── Who am I (also tells the sign-in gate whether this account is allowed) ──
+export const getMe = () => api.get('/me').then(r => r.data);
 
 // ── Connections ────────────────────────────────────────────────────────────
 export const getConnections = () => api.get('/connections').then(r => r.data);
@@ -48,3 +62,9 @@ export const compareData = ({ leftConnId, rightConnId, formName, keyField, qLeft
 
 export const compareFields = ({ leftConnId, rightConnId, formName, keyField }) =>
   api.post('/compare/fields', { leftConnId, rightConnId, formName, keyField }).then(r => r.data);
+
+// ── Diagnostics ────────────────────────────────────────────────────────────
+// `forms` is an optional comma-separated list of form names to probe instead
+// of the default set.
+export const runDiagnostic = (forms) =>
+  api.get('/helix/diagnostic', { params: forms ? { forms } : {} }).then(r => r.data);

@@ -4,13 +4,13 @@ const store = require('../lib/connectionStore');
 const helix = require('../lib/helixClient');
 const { diffByKey } = require('../lib/diff');
 
-function resolveConn(id, label) {
+async function resolveConn(req, id, label) {
   if (!id) {
     const err = new Error(`${label} connection id is required`);
     err.status = 400;
     throw err;
   }
-  const conn = store.getById(id);
+  const conn = await store.getById(req.user.uid, id);
   if (!conn) {
     const err = new Error(`${label} connection not found`);
     err.status = 404;
@@ -28,6 +28,19 @@ function normalizeList(data) {
   return arr.map(e => e?.values || e);
 }
 
+// Trim the diff down to what the UI actually renders. Matters most on the
+// hosted site, where serverless responses are capped at a few MB: full left and
+// right copies of every record would roughly triple the payload.
+function slim(result) {
+  return {
+    summary: result.summary,
+    removed: result.removed.map(({ key }) => ({ key })),
+    added: result.added.map(({ key }) => ({ key })),
+    modified: result.modified.map(({ key, fieldDiffs }) => ({ key, fieldDiffs })),
+    unchanged: result.unchanged.map(({ key, left }) => ({ key, left }))
+  };
+}
+
 // POST /api/compare/data — generic ITSM configuration/reference data diff.
 // Works against any form (e.g. CTM:Category, CTM:Support Group, CTM:People
 // Organization). Entries are the one BMC REST resource that supports real
@@ -38,16 +51,15 @@ router.post('/data', async (req, res) => {
   if (!formName) return res.status(400).json({ error: 'formName is required' });
   if (!keyField) return res.status(400).json({ error: 'keyField is required' });
 
-  const leftConn = resolveConn(leftConnId, 'Left');
-  const rightConn = resolveConn(rightConnId, 'Right');
+  const leftConn = await resolveConn(req, leftConnId, 'Left');
+  const rightConn = await resolveConn(req, rightConnId, 'Right');
 
   const [leftData, rightData] = await Promise.all([
     helix.queryEntries(leftConn, formName, { q: qLeft, fields, limit: 1000 }),
     helix.queryEntries(rightConn, formName, { q: qRight, fields, limit: 1000 })
   ]);
 
-  const result = diffByKey(normalizeList(leftData), normalizeList(rightData), keyField);
-  res.json(result);
+  res.json(slim(diffByKey(normalizeList(leftData), normalizeList(rightData), keyField)));
 });
 
 // POST /api/compare/fields — diff a form's FIELD DEFINITIONS (schema) rather
@@ -60,16 +72,15 @@ router.post('/fields', async (req, res) => {
   if (!formName) return res.status(400).json({ error: 'formName is required' });
   if (!keyField) return res.status(400).json({ error: 'keyField is required' });
 
-  const leftConn = resolveConn(leftConnId, 'Left');
-  const rightConn = resolveConn(rightConnId, 'Right');
+  const leftConn = await resolveConn(req, leftConnId, 'Left');
+  const rightConn = await resolveConn(req, rightConnId, 'Right');
 
   const [leftData, rightData] = await Promise.all([
     helix.getFormFields(leftConn, formName),
     helix.getFormFields(rightConn, formName)
   ]);
 
-  const result = diffByKey(normalizeList(leftData), normalizeList(rightData), keyField);
-  res.json(result);
+  res.json(slim(diffByKey(normalizeList(leftData), normalizeList(rightData), keyField)));
 });
 
 module.exports = router;
