@@ -78,6 +78,7 @@ function ConnectionForm({ onSave, onCancel }) {
 }
 
 function ConnectionCard({ conn }) {
+  const hosted = useAuthUser()?.hosted;
   const [testStatus, setTestStatus] = useState(null);
   const [testMsg, setTestMsg] = useState('');
   const { activeConnectionId, setActiveConnection } = useAppStore();
@@ -124,7 +125,7 @@ function ConnectionCard({ conn }) {
             <div>
               <div>✗ {testMsg}</div>
               <div className={styles.testHint}>
-                Check: URL reachable? Credentials correct? Try enabling Ignore SSL if on an internal server.
+                Check: URL reachable? Credentials correct?{hosted ? ' (The hosted site only reaches public https instances — use the desktop app for internal or IP-restricted ones.)' : ' Try enabling Ignore SSL if on an internal server.'}
               </div>
             </div>
           )}
