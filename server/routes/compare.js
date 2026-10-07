@@ -19,6 +19,11 @@ async function resolveConn(req, id, label) {
   return conn;
 }
 
+// Tag a failure with which instance it came from, so the message can say
+// 'Left connection "Dev": …' instead of leaving the user to guess.
+const forSide = (label, conn, promise) =>
+  promise.catch(err => { err.helixContext = `${label} connection "${conn.name}"`; throw err; });
+
 // Normalizes BMC's various "list" response shapes into a flat array. Used for
 // both entry responses ({ entries: [{ values: {...} }] }) and field-metadata
 // responses (shape unverified across BMC versions — could be an array, or
@@ -55,8 +60,8 @@ router.post('/data', async (req, res) => {
   const rightConn = await resolveConn(req, rightConnId, 'Right');
 
   const [leftData, rightData] = await Promise.all([
-    helix.queryEntries(leftConn, formName, { q: qLeft, fields, limit: 1000 }),
-    helix.queryEntries(rightConn, formName, { q: qRight, fields, limit: 1000 })
+    forSide('Left', leftConn, helix.queryEntries(leftConn, formName, { q: qLeft, fields, limit: 1000 })),
+    forSide('Right', rightConn, helix.queryEntries(rightConn, formName, { q: qRight, fields, limit: 1000 }))
   ]);
 
   res.json(slim(diffByKey(normalizeList(leftData), normalizeList(rightData), keyField)));
@@ -76,8 +81,8 @@ router.post('/fields', async (req, res) => {
   const rightConn = await resolveConn(req, rightConnId, 'Right');
 
   const [leftData, rightData] = await Promise.all([
-    helix.getFormFields(leftConn, formName),
-    helix.getFormFields(rightConn, formName)
+    forSide('Left', leftConn, helix.getFormFields(leftConn, formName)),
+    forSide('Right', rightConn, helix.getFormFields(rightConn, formName))
   ]);
 
   res.json(slim(diffByKey(normalizeList(leftData), normalizeList(rightData), keyField)));

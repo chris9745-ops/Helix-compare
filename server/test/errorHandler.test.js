@@ -50,9 +50,21 @@ test('status text is included when present and no message is available', () => {
   assert.match(run(upstream(500, '', 'Internal Server Error')).body.error, /HTTP 500 Internal Server Error/);
 });
 
+test("a Tomcat 404 page surfaces the path that wasn't found, not the page's CSS", () => {
+  const tomcat = '<!doctype html><html lang="en"><head><title>HTTP Status 404 \u2013 Not Found</title>' +
+    '<style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;}</style></head>' +
+    '<body><h1>HTTP Status 404 \u2013 Not Found</h1><hr class="line" /><p><b>Type</b> Status Report</p>' +
+    '<p><b>Message</b> /api/jwt/login/api/jwt/login</p><p><b>Description</b> The origin server did not find a current representation ' +
+    'for the target resource or is not willing to disclose that one exists.</p><hr class="line" /><h3>Apache Tomcat/9.0.1</h3></body></html>';
+  const r = run(upstream(404, tomcat, ''));
+  assert.equal(r.code, 404);
+  assert.match(r.body.error, /Message \/api\/jwt\/login\/api\/jwt\/login/);
+  assert.doesNotMatch(r.body.error, /font-family|Tahoma|#525D76/);
+});
+
 test('long page text is truncated', () => {
   const r = run(upstream(403, 'x'.repeat(5000)));
-  assert.ok(r.body.error.length < 260);
+  assert.ok(r.body.error.length < 260, `was ${r.body.error.length}`);
 });
 
 test('non-upstream errors are unchanged', () => {

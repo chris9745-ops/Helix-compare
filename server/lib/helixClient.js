@@ -1,17 +1,41 @@
 const axios = require('axios');
+const http = require('http');
 const https = require('https');
 
 // In-memory token cache: { connectionId -> { token, expiresAt } }
 const tokenCache = new Map();
 
-function makeClient(connection, contentType = 'application/json') {
-  const agent = connection.ignoreSSL
-    ? new https.Agent({ rejectUnauthorized: false })
-    : undefined;
+// Connection reuse (keep-alive) is OFF on purpose. On serverless hosts such as
+// Netlify the process is frozen between requests, so a pooled socket is often
+// already closed by the server when the function wakes up, and the next call fails
+// with "read ECONNRESET". A fresh connection per call costs a little latency and
+// removes that whole failure mode.
+const httpAgent = new http.Agent({ keepAlive: false });
+const strictHttpsAgent = new https.Agent({ keepAlive: false });
+const lenientHttpsAgent = new https.Agent({ keepAlive: false, rejectUnauthorized: false });
 
+function agentsFor(connection) {
+  return { httpAgent, httpsAgent: connection.ignoreSSL ? lenientHttpsAgent : strictHttpsAgent };
+}
+
+// A reset/broken pipe means the request may never have been processed, and our
+// Helix calls (reads and logins) are safe to repeat, so retry once on a fresh
+// connection. One retry only: a second failure is reported, not hidden.
+const RETRYABLE = new Set(['ECONNRESET', 'EPIPE']);
+
+async function withRetry(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!RETRYABLE.has(err.code)) throw err;
+    return fn();
+  }
+}
+
+function makeClient(connection, contentType = 'application/json') {
   return axios.create({
     baseURL: connection.baseUrl,
-    httpsAgent: agent,
+    ...agentsFor(connection),
     timeout: 30000,
     headers: { 'Content-Type': contentType }
   });
@@ -23,9 +47,7 @@ async function getToken(connection) {
     return cached.token;
   }
 
-  const agent = connection.ignoreSSL
-    ? new https.Agent({ rejectUnauthorized: false })
-    : undefined;
+  const agents = agentsFor(connection);
 
   const params = new URLSearchParams();
   params.append('username', connection.username);
@@ -36,16 +58,16 @@ async function getToken(connection) {
   let refreshToken;
 
   try {
-    const res = await axios.post(
+    const res = await withRetry(() => axios.post(
       `${connection.baseUrl}/api/jwt/login`,
       params.toString(),
       {
-        httpsAgent: agent,
+        ...agents,
         timeout: 30000,
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         responseType: 'text'
       }
-    );
+    ));
 
     token = typeof res.data === 'string' ? res.data.trim() : null;
 
@@ -61,16 +83,16 @@ async function getToken(connection) {
 
   } catch (err) {
     if (err.response?.status === 415 || err.response?.status === 404) {
-      const res2 = await axios.post(
+      const res2 = await withRetry(() => axios.post(
         `${connection.baseUrl}/api/rx/authentication/loginrequest`,
         { userName: connection.username, password: connection.password, locale: 'en-us' },
         {
-          httpsAgent: agent,
+          ...agents,
           timeout: 30000,
           headers: { 'Content-Type': 'application/json', 'X-Requested-By': 'XMLHttpRequest' },
           responseType: 'text'
         }
-      );
+      ));
       token = typeof res2.data === 'string' ? res2.data.trim() : null;
       if (!token) throw new Error('No token from Innovation Suite auth endpoint');
     } else {
@@ -90,10 +112,10 @@ async function getToken(connection) {
 async function helixGet(connection, path, params = {}) {
   const token = await getToken(connection);
   const client = makeClient(connection);
-  const res = await client.get(path, {
+  const res = await withRetry(() => client.get(path, {
     headers: { Authorization: `AR-JWT ${token}` },
     params
-  });
+  }));
   return res.data;
 }
 
@@ -143,36 +165,7 @@ async function testConnection(connection) {
   return { success: true, token: token.substring(0, 20) + '...' };
 }
 
-// ── Forms / Schema ─────────────────────────────────────────────────────────
-async function getForms(connection) {
-  // ARSchema is the internal form that lists all forms
-  try {
-    const fields = 'values(Schema Name,Schema Type,Modified Date)';
-    const data = await queryEntries(connection, 'ARSchema', { fields, limit: 500 });
-    const items = (data.entries || data).map(e => ({
-      name: e.values?.['Schema Name'],
-      type: e.values?.['Schema Type'],
-      modifiedDate: e.values?.['Modified Date'],
-    }));
-    return { items };
-  } catch (err) {
-    // Fallback: try the v1 schema endpoint which works on some versions
-    try {
-      return await helixGet(connection, '/api/arsys/v1/schema');
-    } catch {
-      throw err;
-    }
-  }
-}
-
-async function getFormSchema(connection, formName) {
-  try {
-    return await helixGet(connection, `/api/arsys/v1/schema/${encodeURIComponent(formName)}`);
-  } catch (err) {
-    throw err;
-  }
-}
-
+// ── Fields ─────────────────────────────────────────────────────────────────
 async function getFormFields(connection, formName) {
   // Documented platform REST API resource: "field on a form" — GET /fields/{formName}
   return helixGet(connection, `/api/arsys/v1/fields/${encodeURIComponent(formName)}`);
@@ -185,19 +178,10 @@ async function getMenu(connection, menuName) {
   return helixGet(connection, `/api/arsys/v1/menu/${encodeURIComponent(menuName)}`);
 }
 
-// ── Stub write operations (for future implementation) ──────────────────────
-async function createField(connection, formName, fieldDef) {
-  throw new Error('Creating fields via REST API is not supported in this version.');
-}
-
-async function updateField(connection, formName, fieldId, fieldDef) {
-  throw new Error('Updating fields via REST API is not supported in this version.');
-}
-
 module.exports = {
   testConnection,
   clearToken,
   queryEntries,
-  getForms, getFormSchema, getFormFields, createField, updateField,
+  getFormFields,
   getMenu
 };
