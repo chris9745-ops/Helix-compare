@@ -20,6 +20,7 @@ const IDLE_CLOSE_MS = 10 * 60 * 1000;
 const NAMES_TTL_MS = 60 * 1000;
 const FIELDS_TTL_MS = 10 * 60 * 1000;
 const MAX_BATCH = 50;
+const BULK_CHUNK = 100;
 
 // In the packaged app the script must live outside app.asar so a real `java` can read it.
 const HELPER_SCRIPT = path.join(__dirname, '../../workflow-helper/ar-helper.js')
@@ -205,11 +206,35 @@ class WorkflowService {
     return { form, activeLinks, filters, escalations };
   }
 
+  /** Every object name of a kind on the server (cached). */
+  allNames(conn, kind) {
+    this._kind(kind);
+    return this._cached(conn, `all:${kind}`, FIELDS_TTL_MS,
+      () => this._request(conn, 'listWorkflow', { kind }, REQUEST_TIMEOUT_MS));
+  }
+
+  /**
+   * Full raw definitions as Map name -> definition. `scope` is { form } (everything attached to
+   * a form, one round trip) or { names } (fetched in chunks).
+   */
+  async fetchObjects(conn, kind, scope) {
+    this._kind(kind);
+    const out = new Map();
+    const add = (list) => { for (const o of list || []) out.set(o.name, o); };
+    if (scope.form) {
+      add(await this._request(conn, 'getObjectsBulk', { kind, form: scope.form }, REQUEST_TIMEOUT_MS));
+    } else {
+      const names = scope.names || [];
+      for (let i = 0; i < names.length; i += BULK_CHUNK) {
+        add(await this._request(conn, 'getObjectsBulk', { kind, names: names.slice(i, i + BULK_CHUNK) }, REQUEST_TIMEOUT_MS));
+      }
+    }
+    return out;
+  }
+
   /** Case-insensitive substring search across every object name of a kind. */
   async search(conn, kind, q, limit = 200) {
-    this._kind(kind);
-    const all = await this._cached(conn, `all:${kind}`, FIELDS_TTL_MS,
-      () => this._request(conn, 'listWorkflow', { kind }, REQUEST_TIMEOUT_MS));
+    const all = await this.allNames(conn, kind);
     const needle = String(q || '').toLowerCase();
     const hits = needle ? all.filter((n) => n.toLowerCase().includes(needle)) : all;
     return { total: all.length, matched: hits.length, names: hits.slice(0, limit) };

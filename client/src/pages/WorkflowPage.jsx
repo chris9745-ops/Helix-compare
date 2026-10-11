@@ -19,7 +19,7 @@ const errorText = (e) => e?.response?.data?.error || e?.message || 'Something we
 
 // ── pieces ───────────────────────────────────────────────────────────────────
 
-function Notice({ tone = 'info', title, children }) {
+export function Notice({ tone = 'info', title, children }) {
   return (
     <div className={`${styles.notice} ${styles[`notice_${tone}`]}`}>
       {title && <div className={styles.noticeTitle}>{title}</div>}
@@ -62,11 +62,11 @@ function EndpointEditor({ conn, compact }) {
   );
 }
 
-function Badge({ tone = 'gray', children }) {
+export function Badge({ tone = 'gray', children }) {
   return <span className={`${styles.badge} ${styles[`badge_${tone}`]}`}>{children}</span>;
 }
 
-function ActionBlock({ title, actions }) {
+export function ActionBlock({ title, actions }) {
   if (!actions?.length) return null;
   return (
     <section className={styles.section}>

@@ -77,6 +77,14 @@ export const searchWorkflow = (connId, kind, q) =>
 export const getWorkflowObject = (connId, kind, name) =>
   api.get(`/workflow/${connId}/object`, { params: { kind, name } }).then(r => r.data);
 
+// ── Workflow compare (Dev vs Prod) ───────────────────────────────────────────
+export const startWorkflowCompare = (body) =>
+  api.post('/workflow/compare', body).then(r => r.data);
+export const getWorkflowCompare = (jobId) =>
+  api.get(`/workflow/compare/${jobId}`).then(r => r.data);
+export const getWorkflowCompareObject = (jobId, kind, name) =>
+  api.get(`/workflow/compare/${jobId}/object`, { params: { kind, name } }).then(r => r.data);
+
 // ── Diagnostics ────────────────────────────────────────────────────────────
 // `forms` is an optional comma-separated list of form names to probe instead
 // of the default set.

@@ -106,3 +106,88 @@ test('hosted mode refuses workflow routes with a clear 501 before touching any h
     srv.close();
   }
 });
+
+// ── Dev vs Prod compare ──────────────────────────────────────────────────────
+async function waitForJob(jobId) {
+  for (let i = 0; i < 100; i++) {
+    const r = await call('GET', `/api/workflow/compare/${jobId}`);
+    if (r.json.status !== 'running') return r.json;
+    await new Promise((res) => setTimeout(res, 50));
+  }
+  throw new Error('compare job did not finish');
+}
+
+test('compare: form scope finds modified, only-in-dev, only-in-prod and ignores deployment metadata', async () => {
+  const dev = (await call('POST', '/api/connections', {
+    name: 'Dev', baseUrl: 'http://localhost:8008', username: 'u', password: 'p', arPort: 46000
+  })).json;
+  const prod = (await call('POST', '/api/connections', {
+    name: 'Prod', baseUrl: 'http://localhost:8009', username: 'u', password: 'p', arPort: 48000
+  })).json;
+
+  const start = await call('POST', '/api/workflow/compare', {
+    leftConnId: dev.id, rightConnId: prod.id, scope: { type: 'form', form: 'CTM:Support Group' },
+    kinds: ['filter', 'activeLink']
+  });
+  assert.equal(start.status, 202);
+  const job = await waitForJob(start.json.jobId);
+  assert.equal(job.status, 'done', job.error);
+
+  const f = job.result.summary.filter;
+  assert.deepEqual({ ...f }, { left: 2, right: 3, onlyLeft: 0, onlyRight: 1, modified: 1, same: 1 });
+  assert.deepEqual(job.result.summary.activeLink, { left: 1, right: 0, onlyLeft: 1, onlyRight: 0, modified: 0, same: 0 });
+
+  const items = Object.fromEntries(job.result.items.map((i) => [`${i.kind}:${i.name}`, i]));
+  assert.equal(items['filter:CTM:SG:Validate'].status, 'modified');
+  assert.deepEqual(items['filter:CTM:SG:Validate'].aspects, ['Run If']);
+  assert.equal(items['filter:CTM:SG:ProdOnly'].status, 'onlyRight');
+  assert.equal(items['activeLink:CTM:SG:DevOnlyAL'].status, 'onlyLeft');
+  assert.equal(items['filter:CTM:SG:Same'], undefined, 'identical apart from who changed it');
+
+  // readable detail for the modified one
+  const detail = await call('GET', `/api/workflow/compare/${start.json.jobId}/object?kind=filter&name=${encodeURIComponent('CTM:SG:Validate')}`);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.json.left.runIf, `'Company' = "Calbro"`);
+  assert.equal(detail.json.right.runIf, `'Company' = "Federal"`);
+  assert.deepEqual(detail.json.changes.map((c) => c.aspect), ['Run If']);
+
+  // an object that exists on one side only still returns the other side as null
+  const only = await call('GET', `/api/workflow/compare/${start.json.jobId}/object?kind=filter&name=${encodeURIComponent('CTM:SG:ProdOnly')}`);
+  assert.equal(only.json.left, null);
+  assert.equal(only.json.right.name, 'CTM:SG:ProdOnly');
+});
+
+test('compare: name-pattern scope matches across the whole server', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const dev = conns.find((c) => c.name === 'Dev'), prod = conns.find((c) => c.name === 'Prod');
+  const start = await call('POST', '/api/workflow/compare', {
+    leftConnId: dev.id, rightConnId: prod.id, scope: { type: 'pattern', pattern: 'CTM:SG:*' }, kinds: ['filter']
+  });
+  const job = await waitForJob(start.json.jobId);
+  assert.equal(job.status, 'done', job.error);
+  // dev's name list has CTM:SG:Validate; prod's has Validate, Same, ProdOnly
+  assert.deepEqual(job.result.summary.filter, { left: 1, right: 3, onlyLeft: 0, onlyRight: 2, modified: 1, same: 0 });
+});
+
+test('compare: validation, unknown jobs and a missing form surface as clear errors', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const [dev, prod] = [conns.find((c) => c.name === 'Dev'), conns.find((c) => c.name === 'Prod')];
+  const post = (body) => call('POST', '/api/workflow/compare', { leftConnId: dev.id, rightConnId: prod.id, ...body });
+
+  assert.equal((await post({ scope: { type: 'form', form: ' ' } })).status, 400);
+  assert.equal((await post({ scope: { type: 'pattern', pattern: '*a' } })).status, 400);
+  assert.equal((await post({ scope: { type: 'weird' } })).status, 400);
+  assert.equal((await post({ scope: { type: 'form', form: 'X' }, kinds: ['nope'] })).status, 400);
+  assert.equal((await call('POST', '/api/workflow/compare', {
+    leftConnId: dev.id, rightConnId: dev.id, scope: { type: 'form', form: 'X' }
+  })).status, 400);
+  assert.equal((await call('POST', '/api/workflow/compare', {
+    leftConnId: 'nope', rightConnId: prod.id, scope: { type: 'form', form: 'X' }
+  })).status, 404);
+  assert.equal((await call('GET', '/api/workflow/compare/not-a-job')).status, 404);
+
+  const start = await post({ scope: { type: 'form', form: 'No Such Form' }, kinds: ['filter'] });
+  const job = await waitForJob(start.json.jobId);
+  assert.equal(job.status, 'error');
+  assert.match(job.error, /does not exist/);
+});
