@@ -40,7 +40,7 @@ Developer Studio speaks (a different port, not HTTP/REST). This tool can't brows
 compare those objects as a result; comparing workflow customizations between
 environments still requires Developer Studio's `.def` export, or `arexportcmd`.
 
-This was tested directly against a Helix 26.2 (container-based) server: the older "AR System Metadata:*"
+This was tested directly against a Helix 26.x (container-based, now on 26.3) server: the older "AR System Metadata:*"
 forms (`arschema`, `field`, `actlink`, `filter`, `escalation`) that some on-prem versions expose as ordinary
 records all return "Form does not exist on server", and BMC's own article says that technique doesn't apply to
 21.05+ container environments. So there is no REST route to the form list or to workflow objects there.
