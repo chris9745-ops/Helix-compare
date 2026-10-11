@@ -42,6 +42,7 @@
     "files": [
       "electron/**/*",
       "server/**/*",
+      "workflow-helper/**/*",
       "client/dist/**/*",
       "!server/data/**",
       "!server/test/**",
@@ -62,6 +63,9 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "artifactName": "${productName} Setup ${version}-${arch}.${ext}"
-    }
+    },
+    "asarUnpack": [
+      "workflow-helper/**/*"
+    ]
   }
 }

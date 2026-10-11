@@ -9,7 +9,8 @@ import styles from './ConnectionsPage.module.css';
 
 function ConnectionForm({ onSave, onCancel }) {
   const [form, setForm] = useState({
-    name: '', baseUrl: '', username: '', password: '', authString: '', ignoreSSL: false
+    name: '', baseUrl: '', username: '', password: '', authString: '', ignoreSSL: false,
+    arHost: '', arPort: ''
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const hosted = useAuthUser()?.hosted;
@@ -55,6 +56,18 @@ function ConnectionForm({ onSave, onCancel }) {
             onChange={e => set('authString', e.target.value)}
           />
         </label>
+        {!hosted && (
+          <div className={styles.row}>
+            <label className={styles.field}>
+              <span>AR server host <span className={styles.optional}>(workflow browser — optional)</span></span>
+              <input placeholder="127.0.0.1" value={form.arHost} onChange={e => set('arHost', e.target.value)} />
+            </label>
+            <label className={styles.field}>
+              <span>AR server port <span className={styles.optional}>(Client Gateway, e.g. 46000)</span></span>
+              <input placeholder="46000" inputMode="numeric" value={form.arPort} onChange={e => set('arPort', e.target.value)} />
+            </label>
+          </div>
+        )}
         {!hosted && (
           <label className={styles.checkField}>
             <input type="checkbox" checked={form.ignoreSSL} onChange={e => set('ignoreSSL', e.target.checked)} />

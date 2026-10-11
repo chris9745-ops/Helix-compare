@@ -11,6 +11,32 @@ const MAX_FORM_LIST_BYTES = 800 * 1024;
 
 const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
 
+// Native AR API endpoint (the BMC Client Gateway on this machine) used by the workflow browser.
+// Optional, and only meaningful for the desktop/local app.
+function parseArEndpoint({ arHost, arPort }, { partial = false } = {}) {
+  const out = {};
+  if (arHost !== undefined) {
+    const host = String(arHost || '').trim();
+    if (host && !/^[A-Za-z0-9.-]+$/.test(host)) {
+      const err = new Error('AR server host may only contain letters, digits, dots and hyphens');
+      err.status = 400;
+      throw err;
+    }
+    out.arHost = host;
+  } else if (!partial) out.arHost = '';
+  if (arPort !== undefined && arPort !== null && arPort !== '') {
+    const port = Number(arPort);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      const err = new Error('AR server port must be a whole number between 1 and 65535');
+      err.status = 400;
+      throw err;
+    }
+    out.arPort = port;
+  } else if (arPort === null || arPort === '') out.arPort = null;
+  else if (!partial) out.arPort = null;
+  return out;
+}
+
 // On the hosted site, skipping TLS verification would send Helix credentials
 // over an unverified connection from a shared server — refuse it there. (The
 // desktop app is the right tool for self-signed/dev instances.)
@@ -40,7 +66,8 @@ router.post('/', async (req, res) => {
     username,
     password,
     authString: typeof authString === 'string' ? authString : '',
-    ignoreSSL: ignoreSSL === true
+    ignoreSSL: ignoreSSL === true,
+    ...(isHosted() ? {} : parseArEndpoint(req.body))
   });
   res.status(201).json(conn);
 });
@@ -52,6 +79,9 @@ router.put('/:id', async (req, res) => {
   if (updates.baseUrl !== undefined) {
     updates.baseUrl = validateBaseUrl(updates.baseUrl, { hosted: isHosted() });
   }
+  delete updates.arHost;
+  delete updates.arPort;
+  if (!isHosted()) Object.assign(updates, parseArEndpoint(req.body, { partial: true }));
   const conn = await store.update(req.user.uid, req.params.id, updates);
   if (!conn) return res.status(404).json({ error: 'Connection not found' });
   res.json(conn);
@@ -60,6 +90,7 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/connections/:id
 router.delete('/:id', async (req, res) => {
   helix.clearToken(req.params.id);
+  require('../lib/workflowService').getService().close(req.params.id);
   await store.delete(req.user.uid, req.params.id);
   res.status(204).send();
 });

@@ -34,7 +34,7 @@ module.exports = {
     return db.get('connections').find({ id }).value();
   },
 
-  async create(_ownerId, { name, baseUrl, username, password, authString = '', ignoreSSL = false }) {
+  async create(_ownerId, { name, baseUrl, username, password, authString = '', ignoreSSL = false, arHost = '', arPort = null }) {
     const conn = {
       id: uuidv4(),
       name,
@@ -43,6 +43,8 @@ module.exports = {
       password,
       authString,   // optional — required by some Helix SSO/LDAP configs
       ignoreSSL,
+      arHost,       // native AR API endpoint for workflow browsing (Client Gateway), local mode only
+      arPort,
       createdAt: new Date().toISOString()
     };
     db.get('connections').push(conn).write();
