@@ -31,6 +31,11 @@ from one codebase:
   pick a form to see everything that runs on it, or search any object by name. Each object shows its execute-on
   conditions, a readable "Run If", and every action (Set Fields, Push Fields, Messages, Guides, …) with field
   names resolved. See [Workflow browser](#workflow-browser-active-links--filters--escalations) for setup.
+- **Workflow compare** *(desktop only)* — Dev vs Prod for Active Links, Filters and Escalations on one form or a
+  name pattern (`HPD:INC:*`): what exists on one side only, and what differs (Run If, actions, forms, properties).
+- **Form layout** *(desktop only)* — a form's views and where every field sits: a wireframe with the form's tab
+  pages selectable, a sortable field table (label, ID, type, visibility, tab order, position, container), and a
+  **Dev vs Prod** mode that outlines changed / Dev-only / Prod-only fields and lists views missing on one side.
 - **Menus** — look up a specific menu's definition by exact name
 - **Diagnostics** — probe which forms are reachable via the REST API on a given instance,
   including a custom-probe box for testing your own candidate form names
@@ -47,9 +52,10 @@ One-time setup:
    (for HMS: `46000` Dev, `47000` QA, `48000` Prod).
 2. **Java 8–14** on the machine (Nashorn was removed in Java 15). Point `HELIX_JAVA` at it if it isn't first on `PATH`.
 3. **The AR API jars** from your own Developer Studio kit (`arapi*.jar` and its companion jars in the
-   `com.bmc.arsys.studio.api_*/lib` folder). They are BMC's, so this repo does not ship them — set
-   `HELIX_AR_LIB` to that folder, or put `{"libDir": "…"}` in `workflow.json` inside the app's data directory.
-   A 25.4.1 client was verified against a 26.3 server.
+   `com.bmc.arsys.studio.api_*/lib` folder). They are BMC's, so this repo does not ship them. Open **Workflow →
+   Setup** and give it the kit folder (any folder at or above the jars works; it is searched for you) — it is saved
+   to `workflow.json` in the app's data directory. For development you can instead set `HELIX_AR_LIB`, which takes
+   priority. A 25.4.1 client was verified against a 26.3 server.
 4. On the connection, set **AR server host / port** (e.g. `127.0.0.1` / `46000`). The connection's Helix
    username and password are used to log in.
 

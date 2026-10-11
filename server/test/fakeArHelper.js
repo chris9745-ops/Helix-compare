@@ -103,6 +103,41 @@ const DATASETS = {
 };
 let data = DATASETS.dev;
 
+// ── layout fixtures: one base view and one translated copy of it ───────────────────────────────
+const pt = (x, y) => ({ _type: 'CoordinateInfo', xCoordinate: x, yCoordinate: y });
+const box = (x1, y1, x2, y2) => ({ dt: 41, v: [pt(x1, y1), pt(x2, y2)] });
+const layoutField = (id, name, dt, over = {}) => ({
+  id, name, dt, type: 1,
+  props: {
+    3: box(0, 0, 100, 20), 4: { dt: 6, v: 1 }, 5: { dt: 6, v: 2 }, 20: { dt: 4, v: name }, 143: { dt: 40, v: id },
+    170: { dt: 40, v: 0 }, ...over
+  }
+});
+const VIEWS_DEV = [
+  { id: 10, name: 'Default Admin View', locale: '', props: { 20: { dt: 4, v: 'Default Administrator View' } } },
+  { id: 11, name: 'Default Admin View_fr', locale: 'fr', props: { 20: { dt: 4, v: 'Default Administrator View' } } },
+  { id: 12, name: 'DevOnlyView', locale: '', props: { 20: { dt: 4, v: 'Dev only' } } }
+];
+const LAYOUT_DEV = {
+  10: [
+    layoutField(1, 'Request ID', 4),
+    layoutField(2, 'Status', 6, { 3: box(0, 40, 100, 60) }),
+    layoutField(3, 'Notes', 5, { 3: box(0, 80, 200, 180) }),
+    layoutField(4, 'Panel', 35, { 3: box(0, 200, 400, 500) }),
+    layoutField(5, 'InsidePanel', 4, { 170: { dt: 40, v: 4 }, 3: box(10, 210, 110, 230) }),
+    { id: 9, name: 'NotOnView', dt: 4, type: 1, props: null }
+  ],
+  12: [layoutField(1, 'Request ID', 4)]
+};
+const LAYOUT_PROD = JSON.parse(JSON.stringify(LAYOUT_DEV));
+LAYOUT_PROD[10][1].props[20] = { dt: 4, v: 'State' };            // Status relabelled
+LAYOUT_PROD[10][2].props[4] = { dt: 6, v: 0 };                    // Notes hidden
+LAYOUT_PROD[10][0].props[3] = box(5, 0, 105, 20);                 // Request ID moved
+LAYOUT_PROD[10][4].props[3] = box(10, 210, 210, 230);             // InsidePanel resized
+LAYOUT_PROD[10].push(layoutField(6, 'ProdOnlyField', 4));         // only on Prod
+LAYOUT_PROD[10].splice(0, 0);                                     // (Panel unchanged)
+const PROD_VIEWS = VIEWS_DEV.filter((v) => v.name !== 'DevOnlyView');
+
 let connected = false;
 const handlers = {
   hello: () => ({ protocol: 1, connected }),
@@ -126,6 +161,14 @@ const handlers = {
       : r.names;
     if (r.form === 'No Such Form') throw new Error('ERROR (303): Form does not exist on server');
     return names.map((n) => data.objects[r.kind][n]).filter(Boolean);
+  },
+  getViews: (r) => {
+    if (r.form !== 'HPD:Help Desk') throw new Error('ERROR (303): Form does not exist on server');
+    return data === DATASETS.prod ? PROD_VIEWS : VIEWS_DEV;
+  },
+  getFieldLayout: (r) => {
+    const set = data === DATASETS.prod ? LAYOUT_PROD : LAYOUT_DEV;
+    return set[r.viewId] || [];
   },
   crash: () => process.exit(7),
   exit: () => { setImmediate(() => process.exit(0)); return true; }

@@ -110,3 +110,22 @@ test('resolveConfig reports what is missing', () => {
     assert.equal(c.ready, true);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('findApiLibDir accepts the lib folder, a parent, or the jar itself', () => {
+  const { findApiLibDir } = require('../lib/workflowService');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-kit-'));
+  try {
+    const lib = path.join(root, 'x64', 'plugins', 'com.bmc.arsys.studio.api_25.4.1.build001', 'lib');
+    fs.mkdirSync(lib, { recursive: true });
+    fs.writeFileSync(path.join(lib, 'arapi990.jar'), '');
+    fs.mkdirSync(path.join(root, 'x64', 'plugins', 'other.plugin', 'lib'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'x64', 'plugins', 'other.plugin', 'lib', 'unrelated.jar'), '');
+
+    assert.equal(findApiLibDir(lib), lib);
+    assert.equal(findApiLibDir(path.join(lib, 'arapi990.jar')), lib);
+    assert.equal(findApiLibDir(root), lib, 'searches down from the kit folder');
+    assert.equal(findApiLibDir(path.join(root, 'nope')), null);
+    assert.equal(findApiLibDir(''), null);
+    assert.equal(findApiLibDir(path.join(root, 'x64', 'plugins', 'other.plugin')), null);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

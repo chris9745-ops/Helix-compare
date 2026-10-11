@@ -191,3 +191,83 @@ test('compare: validation, unknown jobs and a missing form surface as clear erro
   assert.equal(job.status, 'error');
   assert.match(job.error, /does not exist/);
 });
+
+// ── Setup panel ──────────────────────────────────────────────────────────────
+test('settings: a kit folder is resolved to its lib dir, saved, and bad paths are refused', async () => {
+  const kit = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-kit-'));
+  const lib = path.join(kit, 'plugins', 'com.bmc.arsys.studio.api_1', 'lib');
+  fs.mkdirSync(lib, { recursive: true });
+  fs.writeFileSync(path.join(lib, 'arapi990.jar'), '');
+  const saved = workflow.getService().config;
+  try {
+    const bad = await call('PUT', '/api/workflow/settings', { libDir: path.join(kit, 'missing') });
+    assert.equal(bad.status, 400);
+    assert.match(bad.json.error, /No arapi\*\.jar was found/);
+    assert.equal(fs.existsSync(path.join(dataDir, 'workflow.json')), false, 'nothing saved on failure');
+
+    const nojava = await call('PUT', '/api/workflow/settings', { javaPath: '/definitely/not/java' });
+    assert.equal(nojava.status, 400);
+
+    const ok = await call('PUT', '/api/workflow/settings', { libDir: kit });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.libDir, lib);
+    assert.equal(ok.json.source, 'settings');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'workflow.json'), 'utf8')).libDir, lib);
+
+    // clearing it goes back to unset
+    const cleared = await call('PUT', '/api/workflow/settings', { libDir: '' });
+    assert.equal(cleared.json.source, 'unset');
+  } finally {
+    workflow.getService().reconfigure(saved);
+    fs.rmSync(path.join(dataDir, 'workflow.json'), { force: true });
+    fs.rmSync(kit, { recursive: true, force: true });
+  }
+});
+
+// ── Form layout ──────────────────────────────────────────────────────────────
+test('layout: views, fields and a Dev-vs-Prod compare by view name', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const dev = conns.find((c) => c.name === 'Dev'), prod = conns.find((c) => c.name === 'Prod');
+  const form = encodeURIComponent('HPD:Help Desk');
+
+  const views = (await call('GET', `/api/workflow/${dev.id}/layout/views?form=${form}`)).json.views;
+  assert.deepEqual(views.map((v) => [v.name, v.isBase]), [
+    ['Default Admin View', true], ['DevOnlyView', true], ['Default Admin View_fr', false]
+  ], 'base views first (by label), translated copies after');
+  assert.equal(views.filter((v) => v.isBase).length, 2);
+  assert.equal(views.find((v) => v.name === 'Default Admin View').label, 'Default Administrator View');
+
+  const base = views.find((v) => v.name === 'Default Admin View');
+  const fields = (await call('GET', `/api/workflow/${dev.id}/layout?form=${form}&view=${base.id}`)).json.fields;
+  assert.equal(fields.length, 5, 'the field that is not on the view is dropped');
+  assert.equal(fields.find((f) => f.name === 'InsidePanel').parent, 4);
+
+  const cmp = (await call('GET',
+    `/api/workflow/layout-compare?leftConnId=${dev.id}&rightConnId=${prod.id}&form=${form}&view=${encodeURIComponent('Default Admin View')}`)).json;
+  assert.deepEqual(cmp.summary, { left: 5, right: 6, onlyLeft: 0, onlyRight: 1, modified: 4, same: 1, reordered: 0 });
+  assert.deepEqual(cmp.views.onlyLeft.map((v) => v.name), ['DevOnlyView'], 'a base view missing on Prod is called out');
+  assert.deepEqual(cmp.views.onlyRight, []);
+  const by = Object.fromEntries(cmp.items.map((i) => [i.name, i]));
+  assert.deepEqual(by.Status.aspects, ['Label']);
+  assert.deepEqual(by.Notes.aspects, ['Visibility']);
+  assert.deepEqual(by['Request ID'].aspects, ['Position']);
+  assert.deepEqual(by.InsidePanel.aspects, ['Size']);
+  assert.equal(by.ProdOnlyField.status, 'onlyRight');
+  assert.equal(by.Panel, undefined, 'unchanged');
+});
+
+test('layout: validation, missing views and unknown forms are clear 4xx/5xx errors', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const dev = conns.find((c) => c.name === 'Dev'), prod = conns.find((c) => c.name === 'Prod');
+  assert.equal((await call('GET', `/api/workflow/${dev.id}/layout/views`)).status, 400);
+  assert.equal((await call('GET', `/api/workflow/${dev.id}/layout?form=X`)).status, 400);
+  const q = (view) => `/api/workflow/layout-compare?leftConnId=${dev.id}&rightConnId=${prod.id}&form=${encodeURIComponent('HPD:Help Desk')}&view=${encodeURIComponent(view)}`;
+  const missing = await call('GET', q('DevOnlyView'));
+  assert.equal(missing.status, 404);
+  assert.match(missing.json.error, /does not exist on the right server/);
+  assert.equal((await call('GET', q(''))).status, 400);
+  assert.equal((await call('GET',
+    `/api/workflow/layout-compare?leftConnId=${dev.id}&rightConnId=${dev.id}&form=x&view=y`)).status, 400);
+  const noForm = await call('GET', `/api/workflow/${dev.id}/layout/views?form=${encodeURIComponent('No Such')}`);
+  assert.match(noForm.json.error, /does not exist/);
+});
