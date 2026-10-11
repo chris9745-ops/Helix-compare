@@ -9,7 +9,7 @@
  *   qualifier  {op:'and'|'or', l, r} | {op:'not', x} | {op:'rel', rel, l, r} | {op:'fromField'} | null
  *   operand    {t: 1|2|3|5|50|51|52|99..., v}      value  {dt, v}
  */
-const { KEYWORDS, FILTER_OPS, EXECUTE_ON, FUNCTIONS, DISPLAY_PROPS } = require('./arConstants');
+const { KEYWORDS, FILTER_OPS, EXECUTE_ON, FUNCTIONS, DISPLAY_PROPS, OBJECT_PROPS } = require('./arConstants');
 
 const REL_OPS = { 1: '=', 2: '>', 3: '>=', 4: '<', 5: '<=', 6: '!=', 7: 'LIKE', 8: 'IN', 9: 'NOT IN', 10: 'EXISTS' };
 const ARITH_OPS = { 1: '+', 2: '-', 3: '*', 4: '/', 5: '%' };
@@ -249,6 +249,16 @@ function describeSchedule(tm) {
   return `At ${String(tm.hours || '').replace(/[{}]/g, '') || '?'}:${String(tm.minute || 0).padStart(2, '0')} — ${days}`;
 }
 
+// BMC stamps the owning application in property 90002; it has no constant in the API.
+const PROP_LABELS = { 90002: 'Application (90002)' };
+
+/** Object properties as [{ id, name, value }] sorted by id, values rendered like any other value. */
+function describeProperties(props) {
+  return Object.entries(props || {})
+    .map(([id, v]) => ({ id: Number(id), name: PROP_LABELS[id] || OBJECT_PROPS[id] || `property ${id}`, value: renderValue(v) }))
+    .sort((a, b) => a.id - b.id);
+}
+
 const iso = (ts) => (ts && isNum(ts.value) && ts.value > 0 ? new Date(ts.value * 1000).toISOString() : null);
 
 const KIND_LABEL = { activeLink: 'Active Link', filter: 'Filter', escalation: 'Escalation' };
@@ -278,6 +288,7 @@ function describeObject(kind, obj, ctx) {
     lastChangedBy: obj.lastChangedBy || null,
     lastChanged: iso(obj.lastUpdateTime),
     application: props['90002'] && props['90002'].v ? String(props['90002'].v) : null,
+    properties: describeProperties(props),
     helpText: obj.helpText || null
   };
 }
@@ -303,6 +314,6 @@ function referencedForms(obj) {
 }
 
 module.exports = {
-  renderQualifier, renderValue, renderAssign, describeAction, describeObject, describeSchedule,
+  renderQualifier, renderValue, renderAssign, describeAction, describeObject, describeSchedule, describeProperties,
   referencedForms, REL_OPS
 };

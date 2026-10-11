@@ -118,6 +118,26 @@ function diffActions(title, left, right) {
   return out;
 }
 
+/** One entry listing only the object properties that were added, removed or changed. */
+function diffProperties(left, right) {
+  const byId = (list) => new Map(list.map((p) => [p.id, p]));
+  const [l, r] = [byId(left), byId(right)];
+  const leftLines = [], rightLines = [];
+  for (const id of [...new Set([...l.keys(), ...r.keys()])].sort((a, b) => a - b)) {
+    const a = l.get(id), b = r.get(id);
+    if (a && b && a.value === b.value) continue;
+    if (a) leftLines.push(`${a.name} = ${a.value}`);
+    if (b) rightLines.push(`${b.name} = ${b.value}`);
+  }
+  if (!leftLines.length && !rightLines.length) return [];
+  return [{
+    aspect: 'Properties',
+    kind: !leftLines.length ? 'added' : !rightLines.length ? 'removed' : 'changed',
+    left: leftLines.length ? leftLines.join('\n') : null,
+    right: rightLines.length ? rightLines.join('\n') : null
+  }];
+}
+
 const setDiff = (a, b) => ({ onlyLeft: a.filter((x) => !b.includes(x)), onlyRight: b.filter((x) => !a.includes(x)) });
 
 /**
@@ -143,6 +163,7 @@ function changesBetween(l, r) {
       right: forms.onlyRight.length ? `Only here:\n${forms.onlyRight.join('\n')}` : '—'
     });
   }
+  out.push(...diffProperties(l.properties || [], r.properties || []));
   out.push(...diffActions('If action', l.actions, r.actions));
   out.push(...diffActions('Else action', l.elseActions, r.elseActions));
   return out;
@@ -255,6 +276,6 @@ class CompareJobs {
 }
 
 module.exports = {
-  canonical, fingerprint, changedAspects, compareFingerprints, changesBetween, diffActions,
+  canonical, fingerprint, changedAspects, compareFingerprints, changesBetween, diffActions, diffProperties,
   matcher, CompareJobs, MAX_OBJECTS_PER_KIND
 };

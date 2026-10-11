@@ -92,3 +92,17 @@ test('name patterns: * is a wildcard (anchored), otherwise a case-insensitive su
   assert.equal(C.matcher('a.c')('abc'), false, 'regex metacharacters are literal');
   assert.equal(C.matcher('   '), null);
 });
+
+test('property differences are listed by name, only for what actually differs', () => {
+  const p = (id, name, value) => ({ id, name, value });
+  const d = C.diffProperties(
+    [p(60006, 'SCC_LOCKED_BY', '""'), p(60069, 'OVERLAY_EXTEND_MASK', '0'), p(60070, 'OVERLAY_INHERIT_MASK', '3')],
+    [p(60006, 'SCC_LOCKED_BY', '""')]
+  );
+  assert.equal(d.length, 1);
+  assert.equal(d[0].kind, 'removed');   // present on the left only
+  assert.equal(d[0].left, 'OVERLAY_EXTEND_MASK = 0\nOVERLAY_INHERIT_MASK = 3');
+  assert.equal(d[0].right, null);
+  assert.deepEqual(C.diffProperties([p(1, 'A', '1')], [p(1, 'A', '1')]), []);
+  assert.equal(C.diffProperties([p(1, 'A', '1')], [p(1, 'A', '2')])[0].kind, 'changed');
+});

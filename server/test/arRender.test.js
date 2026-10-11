@@ -103,3 +103,12 @@ test('referencedForms skips the (possibly huge) formList but keeps the primary f
   }).sort();
   assert.deepEqual(forms, ['A', 'W', 'X', 'Y']);
 });
+
+test('properties get API names; 90002 is labelled as the application', () => {
+  const props = R.describeProperties({ 60069: { dt: 40, v: 0 }, 90002: { dt: 4, v: 'Remedy ITSM' }, 99999: { dt: 2, v: 5 } });
+  assert.deepEqual(props, [
+    { id: 60069, name: 'OVERLAY_EXTEND_MASK', value: '0' },
+    { id: 90002, name: 'Application (90002)', value: '"Remedy ITSM"' },
+    { id: 99999, name: 'property 99999', value: '5' }
+  ]);
+});
