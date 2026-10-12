@@ -9,8 +9,12 @@ const NAV = [
   { section: 'Schema' },
   { to: '/forms',  label: 'Forms & Fields', icon: '▦' },
   { to: '/menus',  label: 'Menus',          icon: '≡' },
+  { section: 'Workflow', desktopOnly: true },
+  { to: '/workflow', label: 'Workflow', icon: '⚙', desktopOnly: true },
+  { to: '/layout', label: 'Form layout', icon: '▤', desktopOnly: true },
   { section: 'Compare' },
-  { to: '/compare', label: 'Compare', icon: '⇄' },
+  { to: '/compare', label: 'Data compare', icon: '⇄' },
+  { to: '/workflow-compare', label: 'Workflow compare', icon: '⇆', desktopOnly: true },
   { section: 'Config' },
   { to: '/connections', label: 'Connections', icon: '⬡' },
   { to: '/diagnostic',  label: 'Diagnostics', icon: '⚕' },
@@ -60,7 +64,7 @@ export default function Shell() {
         </div>
 
         <nav className={styles.nav}>
-          {NAV.map((item, i) => {
+          {NAV.filter(item => !(item.desktopOnly && authUser?.hosted)).map((item, i) => {
             if (item.section) {
               return <div key={i} className={styles.navSection}>{item.section}</div>;
             }

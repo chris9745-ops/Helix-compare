@@ -35,6 +35,7 @@ function createApp({ serveClient = false, verifyIdToken } = {}) {
   app.use('/api/connections', require('./routes/connections'));
   app.use('/api/helix', require('./routes/helix'));
   app.use('/api/compare', require('./routes/compare'));
+  app.use('/api/workflow', require('./routes/workflow'));
 
   // Unknown /api paths get a JSON 404 rather than falling through to the SPA
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

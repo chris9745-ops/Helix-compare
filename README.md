@@ -27,9 +27,40 @@ from one codebase:
     form — with **Show Hidden** ticked, thousands of them. Copy that table once per environment and paste it into
     the import panel; it's stored with the connection and powers typeahead in every form-name box (Forms &
     Fields, Compare). Handles tab-separated rows, one-cell-per-line copies, extra columns, and stray page text.
+- **Workflow** *(desktop app / `npm run dev` only)* — browse **Active Links, Filters and Escalations** read-only:
+  pick a form to see everything that runs on it, or search any object by name. Each object shows its execute-on
+  conditions, a readable "Run If", and every action (Set Fields, Push Fields, Messages, Guides, …) with field
+  names resolved. See [Workflow browser](#workflow-browser-active-links--filters--escalations) for setup.
+- **Workflow compare** *(desktop only)* — Dev vs Prod for Active Links, Filters and Escalations on one form or a
+  name pattern (`HPD:INC:*`): what exists on one side only, and what differs (Run If, actions, forms, properties).
+- **Form layout** *(desktop only)* — a form's views and where every field sits: a wireframe with the form's tab
+  pages selectable, a sortable field table (label, ID, type, visibility, tab order, position, container), and a
+  **Dev vs Prod** mode that outlines changed / Dev-only / Prod-only fields and lists views missing on one side.
 - **Menus** — look up a specific menu's definition by exact name
 - **Diagnostics** — probe which forms are reachable via the REST API on a given instance,
   including a custom-probe box for testing your own candidate form names
+
+## Workflow browser (Active Links / Filters / Escalations)
+
+REST can't see workflow (see the next section), but the native AR API can — the same one Developer Studio uses,
+reached through BMC's **Helix Client Gateway** (Kaazing) on your own machine. The app drives a small read-only
+helper (`workflow-helper/ar-helper.js`) that runs on the JDK's built-in Nashorn engine, so nothing needs compiling.
+
+One-time setup:
+
+1. **Run the Client Gateway** with the `kwic-config.xml` BMC gave you. It exposes a local port per environment
+   (for HMS: `46000` Dev, `47000` QA, `48000` Prod).
+2. **Java 8–14** on the machine (Nashorn was removed in Java 15). Point `HELIX_JAVA` at it if it isn't first on `PATH`.
+3. **The AR API jars** from your own Developer Studio kit (`arapi*.jar` and its companion jars in the
+   `com.bmc.arsys.studio.api_*/lib` folder). They are BMC's, so this repo does not ship them. Open **Workflow →
+   Setup** and give it the kit folder (any folder at or above the jars works; it is searched for you) — it is saved
+   to `workflow.json` in the app's data directory. For development you can instead set `HELIX_AR_LIB`, which takes
+   priority. A 25.4.1 client was verified against a 26.3 server.
+4. On the connection, set **AR server host / port** (e.g. `127.0.0.1` / `46000`). The connection's Helix
+   username and password are used to log in.
+
+The helper only ever calls `get…`/`getList…` methods — it cannot change anything on the server. It is
+desktop/local only: the hosted Netlify site cannot reach a gateway on your computer.
 
 ## A REST API limitation worth knowing
 
@@ -181,7 +212,10 @@ through Electron's `safeStorage` API) would be the next thing to add.
 
 ## Roadmap
 
-- [ ] `.def` file upload + diff, as the real path to comparing workflow objects
+- [x] Read-only workflow browser (Active Links / Filters / Escalations) via the native AR API
+- [ ] Dev vs Prod **workflow** compare (same engine as data compare, over workflow definitions)
+- [ ] Guarded workflow edits (Dev-only by default, backup + diff before any write)
+- [ ] Surface hidden-form count mismatch: `getListForm` returns 6,389 where the Mid-Tier object list shows 6,576
 - [ ] Saved compare presets (form name + key field) per connection pair
 - [ ] Custom app icon (currently the default Electron icon) and code signing for a warning-free install
 - [ ] Encrypt stored connection passwords via Electron's `safeStorage` API instead of plaintext

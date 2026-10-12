@@ -5,6 +5,9 @@ import FormsPage from './pages/FormsPage';
 import MenusPage from './pages/MenusPage';
 import ComparePage from './pages/ComparePage';
 import DiagnosticPage from './pages/DiagnosticPage';
+import WorkflowPage from './pages/WorkflowPage';
+import WorkflowComparePage from './pages/WorkflowComparePage';
+import FormLayoutPage from './pages/FormLayoutPage';
 
 export default function App() {
   return (
@@ -15,7 +18,10 @@ export default function App() {
           <Route path="connections" element={<ConnectionsPage />} />
           <Route path="forms" element={<FormsPage />} />
           <Route path="menus" element={<MenusPage />} />
+          <Route path="workflow" element={<WorkflowPage />} />
           <Route path="compare" element={<ComparePage />} />
+          <Route path="workflow-compare" element={<WorkflowComparePage />} />
+          <Route path="layout" element={<FormLayoutPage />} />
           <Route path="diagnostic" element={<DiagnosticPage />} />
         </Route>
       </Routes>

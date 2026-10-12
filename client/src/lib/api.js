@@ -65,6 +65,35 @@ export const compareData = ({ leftConnId, rightConnId, formName, keyField, qLeft
 export const compareFields = ({ leftConnId, rightConnId, formName, keyField }) =>
   api.post('/compare/fields', { leftConnId, rightConnId, formName, keyField }).then(r => r.data);
 
+// ── Workflow (Active Links / Filters / Escalations) — desktop app only ─────────
+// Goes through the native AR API via the BMC Client Gateway; REST can't see these objects.
+export const getWorkflowStatus = () => api.get('/workflow/status').then(r => r.data);
+export const saveWorkflowSettings = (settings) =>
+  api.put('/workflow/settings', settings).then(r => r.data);
+// ── Form layout (views and field placement) ──────────────────────────────────
+export const getLayoutViews = (connId, form) =>
+  api.get(`/workflow/${connId}/layout/views`, { params: { form } }).then(r => r.data.views);
+export const getLayoutFields = (connId, form, view) =>
+  api.get(`/workflow/${connId}/layout`, { params: { form, view } }).then(r => r.data.fields);
+export const getLayoutCompare = ({ leftConnId, rightConnId, form, view }) =>
+  api.get('/workflow/layout-compare', { params: { leftConnId, rightConnId, form, view } }).then(r => r.data);
+export const getWorkflowForms = (connId) =>
+  api.get(`/workflow/${connId}/forms`).then(r => r.data.forms);
+export const getFormWorkflow = (connId, form) =>
+  api.get(`/workflow/${connId}/form-workflow`, { params: { form } }).then(r => r.data);
+export const searchWorkflow = (connId, kind, q) =>
+  api.get(`/workflow/${connId}/search`, { params: { kind, q } }).then(r => r.data);
+export const getWorkflowObject = (connId, kind, name) =>
+  api.get(`/workflow/${connId}/object`, { params: { kind, name } }).then(r => r.data);
+
+// ── Workflow compare (Dev vs Prod) ───────────────────────────────────────────
+export const startWorkflowCompare = (body) =>
+  api.post('/workflow/compare', body).then(r => r.data);
+export const getWorkflowCompare = (jobId) =>
+  api.get(`/workflow/compare/${jobId}`).then(r => r.data);
+export const getWorkflowCompareObject = (jobId, kind, name) =>
+  api.get(`/workflow/compare/${jobId}/object`, { params: { kind, name } }).then(r => r.data);
+
 // ── Diagnostics ────────────────────────────────────────────────────────────
 // `forms` is an optional comma-separated list of form names to probe instead
 // of the default set.
