@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getConnections, updateConnection, getWorkflowStatus, getWorkflowForms,
-  getFormWorkflow, searchWorkflow, getWorkflowObject
+  getFormWorkflow, searchWorkflow, getWorkflowObject, saveWorkflowSettings
 } from '../lib/api';
 import { useAppStore } from '../lib/store';
 import { useAuthUser } from '../components/AuthGate';
@@ -58,6 +58,65 @@ function EndpointEditor({ conn, compact }) {
     <details className={styles.endpointDetails}>
       <summary>AR server: {conn.arHost || '127.0.0.1'}:{conn.arPort}</summary>
       {form}
+    </details>
+  );
+}
+
+/** Where the AR API jars and Java are. Used when setup is incomplete, and as a collapsed section otherwise. */
+export function SetupPanel({ status, defaultOpen }) {
+  const qc = useQueryClient();
+  const [libDir, setLibDir] = useState(status.libDir || '');
+  const [javaPath, setJavaPath] = useState('');
+  const save = useMutation({
+    mutationFn: () => saveWorkflowSettings({ libDir, ...(javaPath.trim() ? { javaPath } : {}) }),
+    onSuccess: (s) => { setLibDir(s.libDir || ''); qc.invalidateQueries({ queryKey: ['wf-status'] }); }
+  });
+  const envLocked = status.source === 'environment';
+  const checks = [
+    { ok: status.javaMajor !== null && status.javaMajor <= 14, label: status.javaMajor !== null ? `Java ${status.javaMajor} found (needs 8–14)` : 'Java not found' },
+    { ok: !!status.libDir && status.problems.every(p => !/arapi|jar folder/i.test(p)), label: status.libDir ? `AR API jars: ${status.libDir}` : 'AR API jars not set' }
+  ];
+  return (
+    <details className={styles.setup} open={defaultOpen}>
+      <summary>{status.ready ? 'Setup' : 'Setup needed'}</summary>
+      <ul className={styles.checks}>
+        {checks.map(c => <li key={c.label} className={c.ok ? styles.checkOk : styles.checkBad}>{c.ok ? '✓' : '✗'} {c.label}</li>)}
+      </ul>
+      {envLocked && (
+        <div className={styles.noticeSmall}>
+          <code>HELIX_AR_LIB</code> is set in this app's environment and takes priority over anything saved here.
+        </div>
+      )}
+      <label className={styles.setupField}>
+        <span>Folder containing <code>arapi*.jar</code></span>
+        <input
+          value={libDir}
+          onChange={e => setLibDir(e.target.value)}
+          placeholder="e.g. /Users/you/Documents/HMS/DeveloperStudio/x64 — the kit folder, or its lib folder"
+          spellCheck={false}
+        />
+        <small>Any folder at or above the jars works; it is searched for you. These are BMC's files from your Developer Studio kit.</small>
+      </label>
+      <label className={styles.setupField}>
+        <span>Java (optional)</span>
+        <input
+          value={javaPath}
+          onChange={e => setJavaPath(e.target.value)}
+          placeholder={`Leave blank to use "${status.java}"; must be Java 8–14`}
+          spellCheck={false}
+        />
+      </label>
+      <div className={styles.setupActions}>
+        <Button variant="primary" loading={save.isPending} disabled={!libDir.trim() && !javaPath.trim()} onClick={() => save.mutate()}>
+          Save and check
+        </Button>
+        {save.isError && <span className={styles.inlineError}>{errorText(save.error)}</span>}
+        {save.isSuccess && <span className={styles.saved}>Saved.</span>}
+      </div>
+      <p className={styles.setupHint}>
+        You also need the BMC Client Gateway running on this computer, and your Dev Studio login's port on the connection
+        (Dev <code>46000</code>, QA <code>47000</code>, Prod <code>48000</code>).
+      </p>
     </details>
   );
 }
@@ -235,11 +294,8 @@ export default function WorkflowPage() {
         <div className={styles.body}>
           <Notice tone="error" title="The workflow helper isn't set up yet">
             <ul className={styles.problems}>{status.problems.map((p, i) => <li key={i}>{p}</li>)}</ul>
-            <p>
-              Set <code>HELIX_AR_LIB</code> to the folder containing <code>arapi*.jar</code> (from your Developer
-              Studio kit) and, if needed, <code>HELIX_JAVA</code> to a Java 8–14 runtime, then restart the app.
-            </p>
           </Notice>
+          <SetupPanel status={status} defaultOpen />
         </div>
       </div>
     );
@@ -285,6 +341,10 @@ export default function WorkflowPage() {
         )}
         <EndpointEditor conn={conn} compact />
       </div>
+
+      {status && status.ready && (
+        <div className={styles.setupBar}><SetupPanel status={status} /></div>
+      )}
 
       {listError && (
         <Notice tone="error" title="Could not reach the AR server">

@@ -11,6 +11,7 @@ const NAV = [
   { to: '/menus',  label: 'Menus',          icon: '≡' },
   { section: 'Workflow', desktopOnly: true },
   { to: '/workflow', label: 'Workflow', icon: '⚙', desktopOnly: true },
+  { to: '/layout', label: 'Form layout', icon: '▤', desktopOnly: true },
   { section: 'Compare' },
   { to: '/compare', label: 'Data compare', icon: '⇄' },
   { to: '/workflow-compare', label: 'Workflow compare', icon: '⇆', desktopOnly: true },

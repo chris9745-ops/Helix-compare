@@ -68,6 +68,15 @@ export const compareFields = ({ leftConnId, rightConnId, formName, keyField }) =
 // ── Workflow (Active Links / Filters / Escalations) — desktop app only ─────────
 // Goes through the native AR API via the BMC Client Gateway; REST can't see these objects.
 export const getWorkflowStatus = () => api.get('/workflow/status').then(r => r.data);
+export const saveWorkflowSettings = (settings) =>
+  api.put('/workflow/settings', settings).then(r => r.data);
+// ── Form layout (views and field placement) ──────────────────────────────────
+export const getLayoutViews = (connId, form) =>
+  api.get(`/workflow/${connId}/layout/views`, { params: { form } }).then(r => r.data.views);
+export const getLayoutFields = (connId, form, view) =>
+  api.get(`/workflow/${connId}/layout`, { params: { form, view } }).then(r => r.data.fields);
+export const getLayoutCompare = ({ leftConnId, rightConnId, form, view }) =>
+  api.get('/workflow/layout-compare', { params: { leftConnId, rightConnId, form, view } }).then(r => r.data);
 export const getWorkflowForms = (connId) =>
   api.get(`/workflow/${connId}/forms`).then(r => r.data.forms);
 export const getFormWorkflow = (connId, form) =>

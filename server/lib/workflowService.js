@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { describeObject, referencedForms } = require('./arRender');
+const arLayout = require('./arLayout');
 
 const KINDS = ['activeLink', 'filter', 'escalation'];
 const REQUEST_TIMEOUT_MS = 180000;
@@ -41,6 +42,40 @@ function javaMajor(javaPath) {
   return m[1] === '1' ? parseInt(m[2], 10) : parseInt(m[1], 10);   // 1.8 -> 8
 }
 
+/**
+ * Accepts what a person is likely to give us — the lib folder, the kit folder above it, a path
+ * to the jar itself, or the unpacked Developer Studio plugins folder — and finds the folder
+ * that actually holds arapi*.jar. Returns null when none is found.
+ */
+function findApiLibDir(input) {
+  const start = String(input || '').trim().replace(/^~(?=$|\/)/, process.env.HOME || '~');
+  if (!start || !fs.existsSync(start)) return null;
+  const hasJar = (d) => { try { return fs.readdirSync(d).some((f) => /^arapi.*\.jar$/i.test(f)); } catch { return false; } };
+  let dir = start;
+  if (fs.statSync(dir).isFile()) dir = path.dirname(dir);
+  const queue = [[dir, 0]];
+  let visited = 0;
+  while (queue.length && visited++ < 3000) {   // cap, so pointing at ~/Downloads can't crawl the disk
+    const [d, depth] = queue.shift();
+    if (hasJar(d)) return d;
+    if (depth >= 5) continue;
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    // prefer the usual layout: …/com.bmc.arsys.studio.api_*/lib
+    entries.sort((a, b) => Number(/studio\.api/.test(b.name)) - Number(/studio\.api/.test(a.name)));
+    for (const e of entries) if (e.isDirectory() && !e.name.startsWith('.')) queue.push([path.join(d, e.name), depth + 1]);
+  }
+  return null;
+}
+
+function writeSettings(dataDir, patch) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  const next = { ...readSettings(dataDir), ...patch };
+  for (const k of Object.keys(next)) if (!next[k]) delete next[k];
+  fs.writeFileSync(path.join(dataDir, 'workflow.json'), `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  return next;
+}
+
 /** Where Java and the arapi jars are, and whether that's usable. Never throws. */
 function resolveConfig({ env = process.env, dataDir = env.HELIX_DATA_DIR || path.join(__dirname, '../data'), checkJava = true } = {}) {
   const settings = readSettings(dataDir);
@@ -62,7 +97,8 @@ function resolveConfig({ env = process.env, dataDir = env.HELIX_DATA_DIR || path
     if (major === null) problems.push(`Java was not found (tried "${java}"). Install a Java 8–14 runtime.`);
     else if (major > 14) problems.push(`Java ${major} has no Nashorn engine (removed in 15). Use a Java 8–14 runtime via HELIX_JAVA.`);
   }
-  return { java, libDir, javaMajor: major, problems, ready: problems.length === 0 };
+  const source = env.HELIX_AR_LIB ? 'environment' : settings.libDir ? 'settings' : 'unset';
+  return { java, libDir, javaMajor: major, problems, ready: problems.length === 0, source, settingsFile: path.join(dataDir, 'workflow.json') };
 }
 
 // ── one helper process ───────────────────────────────────────────────────────────────────────
@@ -125,8 +161,15 @@ class WorkflowService {
   }
 
   status() {
-    const { java, libDir, javaMajor: major, problems, ready } = this.config;
-    return { ready, java, libDir, javaMajor: major, problems };
+    const { java, libDir, javaMajor: major, problems, ready, source, settingsFile } = this.config;
+    return { ready, java, libDir, javaMajor: major, problems, source: source || 'unset', settingsFile: settingsFile || null };
+  }
+
+  /** Re-read configuration (after the settings changed); open helpers are closed so they restart cleanly. */
+  reconfigure(config) {
+    this.closeAll();
+    this.config = config || resolveConfig();
+    return this.status();
   }
 
   _command() {
@@ -204,6 +247,49 @@ class WorkflowService {
       () => this._request(conn, 'listWorkflow', { kind, form }));
     const [activeLinks, filters, escalations] = await Promise.all(KINDS.map(names));
     return { form, activeLinks, filters, escalations };
+  }
+
+  /** Raw helper output for a form's views and for one view's field display properties (cached). */
+  viewsRaw(conn, form) {
+    return this._cached(conn, `views:${form}`, FIELDS_TTL_MS, () => this._request(conn, 'getViews', { form }, REQUEST_TIMEOUT_MS));
+  }
+
+  fieldLayoutRaw(conn, form, viewId) {
+    return this._cached(conn, `layout:${form}:${viewId}`, FIELDS_TTL_MS,
+      () => this._request(conn, 'getFieldLayout', { form, viewId }, REQUEST_TIMEOUT_MS));
+  }
+
+  /** A form's views (base views first). */
+  async layoutViews(conn, form) {
+    if (!String(form || '').trim()) throw httpError(400, 'form is required');
+    return arLayout.normalizeViews(await this.viewsRaw(conn, form));
+  }
+
+  /** Fields on one view, normalised for drawing and comparing. */
+  async layout(conn, form, viewId) {
+    if (!Number.isInteger(viewId)) throw httpError(400, 'view must be a view id');
+    return arLayout.normalizeFields(await this.fieldLayoutRaw(conn, form, viewId));
+  }
+
+  /** The same view (matched by internal name) on two servers, diffed field by field. */
+  async compareLayout(left, right, form, viewName) {
+    if (!String(viewName || '').trim()) throw httpError(400, 'view is required');
+    const [lv, rv] = await Promise.all([this.layoutViews(left, form), this.layoutViews(right, form)]);
+    const l = arLayout.findViewByName(lv, viewName), r = arLayout.findViewByName(rv, viewName);
+    if (!l || !r) {
+      const where = !l && !r ? 'either server' : !l ? 'the left server' : 'the right server';
+      throw httpError(404, `The view "${viewName}" does not exist on ${where}.`);
+    }
+    const [lf, rf] = await Promise.all([this.layout(left, form, l.id), this.layout(right, form, r.id)]);
+    // base views that exist on one server only — a whole view added or missing matters more than its fields
+    const names = (list) => new Set(list.filter((v) => v.isBase).map((v) => v.name));
+    const [ln, rn] = [names(lv), names(rv)];
+    const onlyOn = (list, other) => list.filter((v) => v.isBase && !other.has(v.name)).map((v) => ({ name: v.name, label: v.label }));
+    return {
+      view: { name: l.name, label: l.label }, leftViewId: l.id, rightViewId: r.id,
+      views: { onlyLeft: onlyOn(lv, rn), onlyRight: onlyOn(rv, ln) },
+      ...arLayout.compareLayouts(lf, rf)
+    };
   }
 
   /** Every object name of a kind on the server (cached). */
@@ -287,7 +373,7 @@ class WorkflowService {
 
 let shared = null;
 module.exports = {
-  WorkflowService, HelperProcess, resolveConfig, KINDS, MAX_BATCH,
+  WorkflowService, HelperProcess, resolveConfig, findApiLibDir, writeSettings, readSettings, javaMajor, KINDS, MAX_BATCH,
   getService() { if (!shared) shared = new WorkflowService(); return shared; },
   setService(svc) { shared = svc; }          // tests
 };

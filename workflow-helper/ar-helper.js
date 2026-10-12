@@ -304,6 +304,51 @@ var commands = {
     return toJson(invoke(method, args));
   },
 
+  /**
+   * The views (VUIs) of a form: [{ id, name, locale, props }]. One getView per id; a form like
+   * CTM:People has ~70 (locale and web/desktop variants).
+   */
+  getViews: function (r) {
+    need();
+    var form = String(r.form), ids = invoke('getListView', [form, 0]), out = [];
+    for (var i = 0; i < ids.size(); i++) {
+      var id = Number(ids.get(i));
+      try {
+        var v = invoke('getView', [form, id]);
+        out.push({
+          id: id,
+          name: String(v.getName()),
+          locale: v.getLocale() === null ? '' : String(v.getLocale()),
+          props: toJson(v.getDisplayProperties())
+        });
+      } catch (e) { out.push({ id: id, name: '', locale: '', error: errInfo(e).message }); }
+    }
+    return out;
+  },
+
+  /**
+   * Every field's display properties on ONE view: [{ id, name, dt, type, props }]. `props` is null
+   * when the field isn't on that view. Property ids are AR_DPROP_* (3 = bbox, 20 = label, ...).
+   */
+  getFieldLayout: function (r) {
+    need();
+    var viewId = Number(r.viewId), list = ctx.getListFieldObjects(String(r.form)), out = [];
+    for (var i = 0; i < list.size(); i++) {
+      var f = list.get(i), props = null, di = f.getDisplayInstance();
+      if (di) {
+        var it = di.entrySet().iterator();
+        while (it.hasNext()) {
+          var e = it.next();
+          if (Number(e.getKey()) === viewId) { props = toJson(e.getValue()); break; }
+        }
+      }
+      var type = null;
+      try { type = f.getFieldType(); } catch (x) { /* older field classes */ }
+      out.push({ id: f.getFieldID(), name: String(f.getName()), dt: f.getDataType(), type: type, props: props });
+    }
+    return out;
+  },
+
   /** Field id -> name/type for a form, to render qualifiers and assignments readably. */
   getFields: function (r) {
     need();

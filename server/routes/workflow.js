@@ -1,6 +1,7 @@
 // Workflow browsing (Active Links / Filters / Escalations) via the native AR API helper.
 // Desktop/local mode only — the Client Gateway it needs is on the user's own machine.
 const express = require('express');
+const path = require('path');
 const router = express.Router();
 const store = require('../lib/connectionStore');
 const { isHosted } = require('../config');
@@ -35,6 +36,37 @@ async function connection(req) {
 }
 
 router.get('/status', (req, res) => res.json(svc().status()));
+
+// ── Setup: where the AR API jars and Java live ──────────────────────────────
+// A double-clicked desktop app doesn't inherit shell environment variables, so this is how the
+// packaged app is pointed at the user's own Developer Studio kit.
+const dataDir = () => process.env.HELIX_DATA_DIR || path.join(__dirname, '../data');
+
+router.put('/settings', (req, res) => {
+  const { libDir, javaPath } = req.body || {};
+  const patch = {};
+  const problems = [];
+
+  if (libDir !== undefined) {
+    const found = String(libDir).trim() ? workflow.findApiLibDir(libDir) : '';
+    if (String(libDir).trim() && !found) {
+      problems.push(`No arapi*.jar was found in or under "${String(libDir).trim()}". Pick the folder from your Developer Studio kit that contains arapi*.jar (usually …/com.bmc.arsys.studio.api_…/lib).`);
+    } else patch.libDir = found || '';
+  }
+  if (javaPath !== undefined) {
+    const java = String(javaPath).trim();
+    if (java) {
+      const major = workflow.javaMajor(java);
+      if (major === null) problems.push(`Could not run Java at "${java}".`);
+      else if (major > 14) problems.push(`That Java is version ${major}; the helper needs 8–14 (Nashorn was removed in 15).`);
+      else patch.javaPath = java;
+    } else patch.javaPath = '';
+  }
+  if (problems.length) return res.status(400).json({ error: problems.join(' ') });
+
+  workflow.writeSettings(dataDir(), patch);
+  res.json(svc().reconfigure(workflow.resolveConfig({ dataDir: dataDir() })));
+});
 
 // ── Dev-vs-Prod workflow compare ────────────────────────────────────────────
 // Registered before the /:id routes. Long-running, so it's a background job the page polls.
@@ -86,6 +118,25 @@ router.get('/compare/:jobId/object', async (req, res) => {
   };
   const [left, right] = await Promise.all([side(job.left.id), side(job.right.id)]);
   res.json({ left, right, changes: changesBetween(left, right) });
+});
+
+// ── Form layout ─────────────────────────────────────────────────────────────
+router.get('/layout-compare', async (req, res) => {
+  const { leftConnId, rightConnId, form, view } = req.query;
+  const [left, right] = [await connById(req, leftConnId), await connById(req, rightConnId)];
+  if (left.id === right.id) return res.status(400).json({ error: 'Pick two different instances to compare.' });
+  res.json(await svc().compareLayout(left, right, String(form || ''), String(view || '')));
+});
+
+router.get('/:id/layout/views', async (req, res) => {
+  res.json({ views: await svc().layoutViews(await connection(req), String(req.query.form || '').trim()) });
+});
+
+router.get('/:id/layout', async (req, res) => {
+  const form = String(req.query.form || '').trim();
+  const view = Number(req.query.view);
+  if (!form || !Number.isInteger(view)) return res.status(400).json({ error: 'form and view are required' });
+  res.json({ fields: await svc().layout(await connection(req), form, view) });
 });
 
 router.get('/:id/forms', async (req, res) => {
