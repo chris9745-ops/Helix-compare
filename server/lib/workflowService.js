@@ -21,6 +21,7 @@ const IDLE_CLOSE_MS = 10 * 60 * 1000;
 const NAMES_TTL_MS = 60 * 1000;
 const FIELDS_TTL_MS = 10 * 60 * 1000;
 const MAX_BATCH = 50;
+const RECENT_LIMIT = 10000;   // objects per kind; beyond this the window is too wide to be useful
 const BULK_CHUNK = 100;
 
 // In the packaged app the script must live outside app.asar so a real `java` can read it.
@@ -257,6 +258,49 @@ class WorkflowService {
   fieldLayoutRaw(conn, form, viewId) {
     return this._cached(conn, `layout:${form}:${viewId}`, FIELDS_TTL_MS,
       () => this._request(conn, 'getFieldLayout', { form, viewId }, REQUEST_TIMEOUT_MS));
+  }
+
+  /**
+   * Workflow objects changed since a point in time, newest first. `user` filters on who last
+   * changed them; `byUser` is counted BEFORE that filter so the page can offer the other names.
+   */
+  async recentChanges(conn, { since, kinds, form, user }) {
+    if (!(since instanceof Date) || Number.isNaN(since.getTime())) throw httpError(400, 'A valid start date is required.');
+    if (since.getTime() > Date.now()) throw httpError(400, 'The start date is in the future.');
+    const wanted = (kinds && kinds.length ? kinds : KINDS).filter((k) => KINDS.includes(k));
+    if (!wanted.length) throw httpError(400, `kinds must include one of: ${KINDS.join(', ')}`);
+    const seconds = Math.floor(since.getTime() / 1000);
+    const all = [];
+    const counts = {};
+    for (const kind of wanted) {
+      const names = await this._request(conn, 'listWorkflow', { kind, form: form || undefined, since: seconds }, REQUEST_TIMEOUT_MS);
+      if (names.length > RECENT_LIMIT) {
+        throw httpError(400, `${names.length.toLocaleString()} ${kind} objects changed in that window — narrow the dates or pick a form.`);
+      }
+      counts[kind] = names.length;
+      const defs = await this.fetchObjects(conn, kind, { names });
+      for (const [name, o] of defs) {
+        const forms = Array.isArray(o.formList) ? o.formList : [];
+        const t = o.lastUpdateTime && Number.isFinite(o.lastUpdateTime.value) ? o.lastUpdateTime.value : 0;
+        const props = o.properties || {};
+        all.push({
+          kind, name,
+          changedAt: t ? new Date(t * 1000).toISOString() : null,
+          changedBy: o.lastChangedBy || '',
+          enabled: o.enable !== false,
+          primaryForm: o.primaryForm || forms[0] || null,
+          formCount: forms.length,
+          owner: o.owner || null,
+          application: props['90002'] && props['90002'].v ? String(props['90002'].v) : null
+        });
+      }
+    }
+    const byUser = {};
+    for (const r of all) byUser[r.changedBy || '(unknown)'] = (byUser[r.changedBy || '(unknown)'] || 0) + 1;
+    const u = String(user || '').trim().toLowerCase();
+    const rows = (u ? all.filter((r) => r.changedBy.toLowerCase() === u) : all)
+      .sort((a, b) => (b.changedAt || '').localeCompare(a.changedAt || '') || a.name.localeCompare(b.name));
+    return { since: since.toISOString(), kinds: wanted, form: form || null, counts, byUser, rows };
   }
 
   /** A form's views (base views first). */

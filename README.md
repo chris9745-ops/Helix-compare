@@ -33,6 +33,12 @@ from one codebase:
   names resolved. See [Workflow browser](#workflow-browser-active-links--filters--escalations) for setup.
 - **Workflow compare** *(desktop only)* — Dev vs Prod for Active Links, Filters and Escalations on one form or a
   name pattern (`HPD:INC:*`): what exists on one side only, and what differs (Run If, actions, forms, properties).
+  - **Exclude names** (`zSLMGen:*`, one per line or comma-separated) drops generated or irrelevant objects from
+    both sides before comparing; the count of excluded objects is shown. **Export** gives a Markdown report
+    (with what changed in every different object) or a CSV.
+- **Recent changes** *(desktop only)* — everything changed on an instance since a date (24 h … 90 days or a
+  date), newest first, with a per-person tally to filter by, optional form scope, and the object's current
+  definition one click away. Markdown report or CSV export.
 - **Form layout** *(desktop only)* — a form's views and where every field sits: a wireframe with the form's tab
   pages selectable, a sortable field table (label, ID, type, visibility, tab order, position, container), and a
   **Dev vs Prod** mode that outlines changed / Dev-only / Prod-only fields and lists views missing on one side.

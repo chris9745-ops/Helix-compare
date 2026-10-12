@@ -106,3 +106,13 @@ test('property differences are listed by name, only for what actually differs', 
   assert.deepEqual(C.diffProperties([p(1, 'A', '1')], [p(1, 'A', '1')]), []);
   assert.equal(C.diffProperties([p(1, 'A', '1')], [p(1, 'A', '2')])[0].kind, 'changed');
 });
+
+test('exclude patterns: wildcard is anchored, plain text is a substring, blanks are ignored', () => {
+  const ex = C.buildExcluder('zSLMGen:*\n  , *_Temp ,\n');
+  assert.equal(ex('zSLMGen:SLM01201_MeasReqAssoc'), true);
+  assert.equal(ex('HPD:zSLMGen:Foo'), false, 'anchored at the start');
+  assert.equal(ex('HPD:Thing_Temp'), true);
+  assert.equal(C.buildExcluder('   '), null);
+  assert.equal(C.buildExcluder([]), null);
+  assert.equal(C.buildExcluder(['legacy'])('Old_Legacy_Rule'), true, 'substring, case-insensitive');
+});

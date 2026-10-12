@@ -266,9 +266,11 @@ var commands = {
   /** Names of all workflow objects of a kind, optionally scoped to one form. */
   listWorkflow: function (r) {
     need();
-    var k = kindOf(r.kind);
-    var names = r.form ? ctx[k.list](String(r.form)) : ctx[k.list]();
-    return toList(names);
+    var k = kindOf(r.kind), args = [];
+    if (r.form) args.push(String(r.form));
+    // changed-since filter: the API lists only objects modified after this time (epoch seconds)
+    if (r.since !== undefined && r.since !== null) args.push(Math.max(0, Math.floor(Number(r.since))));
+    return toList(invoke(k.list, args));
   },
 
   /** One full definition, serialized generically. */

@@ -142,7 +142,7 @@ export function ActionBlock({ title, actions }) {
   );
 }
 
-function Detail({ connId, kind, name }) {
+export function Detail({ connId, kind, name }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['wf-object', connId, kind, name],
     queryFn: () => getWorkflowObject(connId, kind, name),

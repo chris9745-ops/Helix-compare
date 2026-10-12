@@ -12,6 +12,7 @@ const NAV = [
   { section: 'Workflow', desktopOnly: true },
   { to: '/workflow', label: 'Workflow', icon: '⚙', desktopOnly: true },
   { to: '/layout', label: 'Form layout', icon: '▤', desktopOnly: true },
+  { to: '/recent', label: 'Recent changes', icon: '◷', desktopOnly: true },
   { section: 'Compare' },
   { to: '/compare', label: 'Data compare', icon: '⇄' },
   { to: '/workflow-compare', label: 'Workflow compare', icon: '⇆', desktopOnly: true },

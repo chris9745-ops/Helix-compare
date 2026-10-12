@@ -148,7 +148,15 @@ const handlers = {
     return { host: r.host, port: r.port, user: r.user };
   },
   listForms: () => ['HPD:Help Desk', 'CTM:Support Group'],
-  listWorkflow: (r) => (data.names[r.kind][r.form || '*'] || []),
+  listWorkflow: (r) => {
+    const names = data.names[r.kind][r.form || '*'] || [];
+    if (r.since === undefined || r.since === null) return names;
+    // like the real API: only objects modified after `since`
+    return names.filter((n) => {
+      const o = data.objects[r.kind][n];
+      return o && o.lastUpdateTime && o.lastUpdateTime.value > r.since;
+    });
+  },
   getFields: (r) => { if (!FIELDS[r.form]) throw new Error(`Form does not exist: ${r.form}`); return FIELDS[r.form]; },
   getObject: (r) => {
     const o = data.objects[r.kind][r.name];

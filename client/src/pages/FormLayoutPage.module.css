@@ -97,3 +97,10 @@
   background: var(--amber-bg); flex-shrink: 0;
 }
 .viewsNote strong { color: var(--amber); font-weight: 600; }
+
+.exports { display: inline-flex; gap: 6px; margin-right: 8px; }
+.exportBtn {
+  background: var(--bg-surface); border: 1px solid var(--border-md); border-radius: var(--radius);
+  color: var(--text-primary); padding: 4px 12px; font-size: 12px; text-decoration: none;
+}
+.exportBtn:hover { border-color: var(--accent); }

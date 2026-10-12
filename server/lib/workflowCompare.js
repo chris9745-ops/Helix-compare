@@ -185,6 +185,19 @@ function matcher(pattern) {
   return (n) => n.toLowerCase().includes(needle);
 }
 
+/**
+ * Exclude patterns: a string (one per line or comma-separated) or an array. Same matching rules as
+ * name patterns — `*` is an anchored wildcard, otherwise a case-insensitive substring. Returns a
+ * predicate (name -> true when excluded), or null when there is nothing to exclude.
+ */
+function buildExcluder(exclude) {
+  const list = (Array.isArray(exclude) ? exclude : String(exclude || '').split(/[\n,]+/))
+    .map((p) => String(p).trim()).filter(Boolean);
+  const tests = list.map(matcher).filter(Boolean);
+  if (!tests.length) return null;
+  return (name) => tests.some((t) => t(name));
+}
+
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
 class CompareJobs {
@@ -214,11 +227,16 @@ class CompareJobs {
     }
     if (!['form', 'pattern'].includes(scope.type)) throw httpError(400, 'scope.type must be "form" or "pattern".');
     if (left.id === right.id) throw httpError(400, 'Pick two different instances to compare.');
+    const excluder = buildExcluder(scope.exclude);
+    if (scope.exclude && String(Array.isArray(scope.exclude) ? scope.exclude.join('') : scope.exclude).replace(/[*\s,]/g, '').length === 0) {
+      throw httpError(400, 'An exclude pattern must contain some text (a lone * would hide everything).');
+    }
 
     const job = {
       id: randomUUID(), ownerId, createdAt: Date.now(), status: 'running',
       left: { id: left.id, name: left.name }, right: { id: right.id, name: right.name },
-      scope, kinds: wanted, progress: { step: 0, steps: wanted.length * 2, label: 'Starting…' },
+      scope: { ...scope, exclude: excluder ? (Array.isArray(scope.exclude) ? scope.exclude : String(scope.exclude).split(/[\n,]+/).map((p) => p.trim()).filter(Boolean)) : [] },
+      excluder, kinds: wanted, progress: { step: 0, steps: wanted.length * 2, label: 'Starting…' },
       result: null, error: null
     };
     this.jobs.set(job.id, job);
@@ -230,12 +248,15 @@ class CompareJobs {
     return job;
   }
 
-  async _fingerprints(conn, kind, scope, names) {
+  async _fingerprints(conn, kind, scope, names, excluder, excluded) {
     const raws = scope.type === 'form'
       ? await this.service.fetchObjects(conn, kind, { form: scope.form.trim() })
       : await this.service.fetchObjects(conn, kind, { names });
     const out = new Map();
-    for (const [name, raw] of raws) out.set(name, fingerprint(raw));
+    for (const [name, raw] of raws) {
+      if (excluder && excluder(name)) { excluded.add(name); continue; }
+      out.set(name, fingerprint(raw));
+    }
     return out;
   }
 
@@ -246,24 +267,32 @@ class CompareJobs {
     for (const kind of job.kinds) {
       const kindLabel = { activeLink: 'active links', filter: 'filters', escalation: 'escalations' }[kind];
       let leftNames = null, rightNames = null;
+      const excluded = new Set();
       if (job.scope.type === 'pattern') {
         const test = matcher(job.scope.pattern);
         const [ln, rn] = await Promise.all([this.service.allNames(left, kind), this.service.allNames(right, kind)]);
-        leftNames = ln.filter(test);
-        rightNames = rn.filter(test);
+        // excluded objects are never read at all in this mode (cheaper than reading then dropping)
+        const keep = (n) => {
+          if (!test(n)) return false;
+          if (job.excluder && job.excluder(n)) { excluded.add(n); return false; }
+          return true;
+        };
+        leftNames = ln.filter(keep);
+        rightNames = rn.filter(keep);
         if (leftNames.length > MAX_OBJECTS_PER_KIND || rightNames.length > MAX_OBJECTS_PER_KIND) {
           throw httpError(400, `That pattern matches more than ${MAX_OBJECTS_PER_KIND.toLocaleString()} ${kindLabel}. Narrow it down.`);
         }
       }
       job.progress.label = `Reading ${kindLabel} from ${job.left.name} and ${job.right.name}…`;
       const [lfp, rfp] = await Promise.all([
-        this._fingerprints(left, kind, job.scope, leftNames).then((m) => { step(`Read ${kindLabel} from ${job.left.name}`); return m; }),
-        this._fingerprints(right, kind, job.scope, rightNames).then((m) => { step(`Read ${kindLabel} from ${job.right.name}`); return m; })
+        this._fingerprints(left, kind, job.scope, leftNames, job.excluder, excluded).then((m) => { step(`Read ${kindLabel} from ${job.left.name}`); return m; }),
+        this._fingerprints(right, kind, job.scope, rightNames, job.excluder, excluded).then((m) => { step(`Read ${kindLabel} from ${job.right.name}`); return m; })
       ]);
       const cmp = compareFingerprints(lfp, rfp);
       summary[kind] = {
         left: lfp.size, right: rfp.size,
-        onlyLeft: cmp.onlyLeft.length, onlyRight: cmp.onlyRight.length, modified: cmp.modified.length, same: cmp.same
+        onlyLeft: cmp.onlyLeft.length, onlyRight: cmp.onlyRight.length, modified: cmp.modified.length, same: cmp.same,
+        excluded: excluded.size
       };
       for (const name of cmp.onlyLeft) items.push({ kind, name, status: 'onlyLeft' });
       for (const name of cmp.onlyRight) items.push({ kind, name, status: 'onlyRight' });
@@ -277,5 +306,5 @@ class CompareJobs {
 
 module.exports = {
   canonical, fingerprint, changedAspects, compareFingerprints, changesBetween, diffActions, diffProperties,
-  matcher, CompareJobs, MAX_OBJECTS_PER_KIND
+  matcher, buildExcluder, CompareJobs, MAX_OBJECTS_PER_KIND
 };

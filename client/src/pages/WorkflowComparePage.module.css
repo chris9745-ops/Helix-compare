@@ -80,3 +80,17 @@
 @media (max-width: 900px) {
   .changeCols, .sides { grid-template-columns: 1fr; }
 }
+
+.grow { flex: 1; min-width: 260px; }
+.hintInline { color: var(--text-muted); font-weight: 400; }
+.suggest {
+  background: var(--bg-raised); border: 1px dashed var(--border-md); border-radius: 99px;
+  color: var(--text-secondary); padding: 4px 12px; font-size: 12px; cursor: pointer; margin-bottom: 2px;
+}
+.suggest:hover { border-color: var(--accent); color: var(--text-primary); }
+.exports { display: inline-flex; gap: 6px; margin-left: 8px; }
+.exportBtn {
+  background: var(--bg-surface); border: 1px solid var(--border-md); border-radius: var(--radius);
+  color: var(--text-primary); padding: 5px 12px; font-size: 12px; text-decoration: none;
+}
+.exportBtn:hover { border-color: var(--accent); }

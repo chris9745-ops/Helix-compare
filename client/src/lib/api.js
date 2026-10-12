@@ -77,6 +77,19 @@ export const getLayoutFields = (connId, form, view) =>
   api.get(`/workflow/${connId}/layout`, { params: { form, view } }).then(r => r.data.fields);
 export const getLayoutCompare = ({ leftConnId, rightConnId, form, view }) =>
   api.get('/workflow/layout-compare', { params: { leftConnId, rightConnId, form, view } }).then(r => r.data);
+// ── Recent changes + report downloads ────────────────────────────────────────
+export const getRecentChanges = (connId, params) =>
+  api.get(`/workflow/${connId}/recent`, { params }).then(r => r.data);
+
+/** Report downloads are plain links (the server answers with a file attachment). */
+const qs = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+export const compareExportUrl = (jobId, { format = 'md', details = false } = {}) =>
+  `/api/workflow/compare/${jobId}/export?${qs({ format, details: details ? '1' : undefined })}`;
+export const layoutExportUrl = ({ leftConnId, rightConnId, form, view, format = 'md' }) =>
+  `/api/workflow/layout-compare/export?${qs({ leftConnId, rightConnId, form, view, format })}`;
+export const recentExportUrl = (connId, params, format = 'md') =>
+  `/api/workflow/${connId}/recent/export?${qs({ ...params, format })}`;
+
 export const getWorkflowForms = (connId) =>
   api.get(`/workflow/${connId}/forms`).then(r => r.data.forms);
 export const getFormWorkflow = (connId, form) =>
