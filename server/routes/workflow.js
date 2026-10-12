@@ -7,6 +7,17 @@ const store = require('../lib/connectionStore');
 const { isHosted } = require('../config');
 const workflow = require('../lib/workflowService');
 const { CompareJobs, changesBetween } = require('../lib/workflowCompare');
+const reports = require('../lib/reports');
+
+/** Send a generated report as a file download (md or csv). */
+function sendReport(res, { format, base, md, csv }) {
+  const isCsv = String(format).toLowerCase() === 'csv';
+  res.setHeader('Content-Type', isCsv ? 'text/csv; charset=utf-8' : 'text/markdown; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${reports.slug(base)}-${reports.day(new Date())}.${isCsv ? 'csv' : 'md'}"`);
+  res.send(isCsv ? csv() : md());
+}
+
+const MAX_REPORT_DETAILS = 150;
 
 let jobs = null;
 const compareJobs = () => {
@@ -106,6 +117,40 @@ router.get('/compare/:jobId', (req, res) => {
   });
 });
 
+// Download the finished compare as Markdown (optionally with side-by-side details) or CSV.
+router.get('/compare/:jobId/export', async (req, res) => {
+  const job = jobOr404(req);
+  if (job.status !== 'done') {
+    return res.status(409).json({ error: job.status === 'running' ? 'The comparison is still running.' : 'The comparison did not finish.' });
+  }
+  const wantDetails = req.query.details === '1' && String(req.query.format).toLowerCase() !== 'csv';
+  let details;
+  if (wantDetails) {
+    details = new Map();
+    const mods = job.result.items.filter((i) => i.status === 'modified');
+    const [leftConn, rightConn] = [await connById(req, job.left.id), await connById(req, job.right.id)];
+    const batch = mods.slice(0, MAX_REPORT_DETAILS);
+    const side = async (conn, i) => {
+      try { return await svc().describe(conn, i.kind, i.name, { includeRaw: false }); }
+      catch (e) { if (e.status === 404) return null; throw e; }
+    };
+    for (let n = 0; n < batch.length; n += 6) {
+      await Promise.all(batch.slice(n, n + 6).map(async (i) => {
+        const [l, r] = await Promise.all([side(leftConn, i), side(rightConn, i)]);
+        details.set(`${i.kind}:${i.name}`, { changes: changesBetween(l, r) });
+      }));
+    }
+    details.truncated = mods.length > MAX_REPORT_DETAILS;
+  }
+  const scopeName = job.scope.type === 'form' ? job.scope.form : job.scope.pattern;
+  sendReport(res, {
+    format: req.query.format,
+    base: `workflow-compare_${job.left.name}-vs-${job.right.name}_${scopeName}`,
+    md: () => reports.compareMarkdown(job, { details }),
+    csv: () => reports.compareCsv(job)
+  });
+});
+
 // Both sides of one object, readable, with the differences worked out.
 router.get('/compare/:jobId/object', async (req, res) => {
   const job = jobOr404(req);
@@ -128,6 +173,20 @@ router.get('/layout-compare', async (req, res) => {
   res.json(await svc().compareLayout(left, right, String(form || ''), String(view || '')));
 });
 
+router.get('/layout-compare/export', async (req, res) => {
+  const { leftConnId, rightConnId, form, view, format } = req.query;
+  const [left, right] = [await connById(req, leftConnId), await connById(req, rightConnId)];
+  if (left.id === right.id) return res.status(400).json({ error: 'Pick two different instances to compare.' });
+  const cmp = await svc().compareLayout(left, right, String(form || ''), String(view || ''));
+  const meta = { form: String(form), left: left.name, right: right.name };
+  sendReport(res, {
+    format,
+    base: `layout-compare_${left.name}-vs-${right.name}_${form}_${cmp.view.label || cmp.view.name}`,
+    md: () => reports.layoutMarkdown(cmp, meta),
+    csv: () => reports.layoutCsv(cmp, meta)
+  });
+});
+
 router.get('/:id/layout/views', async (req, res) => {
   res.json({ views: await svc().layoutViews(await connection(req), String(req.query.form || '').trim()) });
 });
@@ -137,6 +196,38 @@ router.get('/:id/layout', async (req, res) => {
   const view = Number(req.query.view);
   if (!form || !Number.isInteger(view)) return res.status(400).json({ error: 'form and view are required' });
   res.json({ fields: await svc().layout(await connection(req), form, view) });
+});
+
+// ── Recent changes ──────────────────────────────────────────────────────────
+function parseRecentQuery(q) {
+  let since;
+  if (q.since) since = new Date(String(q.since));
+  else {
+    const days = Number(q.days || 7);
+    if (!Number.isFinite(days) || days <= 0 || days > 3650) {
+      const err = new Error('days must be between 1 and 3650');
+      err.status = 400;
+      throw err;
+    }
+    since = new Date(Date.now() - days * 86400000);
+  }
+  const kinds = q.kinds ? String(q.kinds).split(',').map((k) => k.trim()).filter(Boolean) : undefined;
+  return { since, kinds, form: String(q.form || '').trim() || undefined, user: q.user };
+}
+
+router.get('/:id/recent', async (req, res) => {
+  res.json(await svc().recentChanges(await connection(req), parseRecentQuery(req.query)));
+});
+
+router.get('/:id/recent/export', async (req, res) => {
+  const conn = await connection(req);
+  const recent = await svc().recentChanges(conn, parseRecentQuery(req.query));
+  sendReport(res, {
+    format: req.query.format,
+    base: `recent-changes_${conn.name}`,
+    md: () => reports.recentMarkdown(recent, { instance: conn.name }),
+    csv: () => reports.recentCsv(recent)
+  });
 });
 
 router.get('/:id/forms', async (req, res) => {

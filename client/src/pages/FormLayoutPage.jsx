@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  getConnections, getWorkflowStatus, getWorkflowForms, getLayoutViews, getLayoutFields, getLayoutCompare
+  getConnections, getWorkflowStatus, getWorkflowForms, getLayoutViews, getLayoutFields, getLayoutCompare,
+  layoutExportUrl
 } from '../lib/api';
 import { useAppStore } from '../lib/store';
 import { useAuthUser } from '../components/AuthGate';
@@ -342,6 +343,14 @@ export default function FormLayoutPage() {
             </span>
           )}
           <div className={styles.spacer} />
+          {view && (
+            <span className={styles.exports}>
+              <a className={styles.exportBtn} download
+                 href={layoutExportUrl({ leftConnId: activeConnectionId, rightConnId: compareWith, form, view: view.name, format: 'md' })}>Report (.md)</a>
+              <a className={styles.exportBtn} download
+                 href={layoutExportUrl({ leftConnId: activeConnectionId, rightConnId: compareWith, form, view: view.name, format: 'csv' })}>CSV</a>
+            </span>
+          )}
           {[['all', 'All'], ['modified', 'Changed'], ['onlyLeft', `Only ${leftName}`], ['onlyRight', `Only ${rightName}`]].map(([k, l]) => (
             <button key={k} className={cmpFilter === k ? styles.chipOn : styles.chip} onClick={() => setCmpFilter(k)}>{l}</button>
           ))}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
-  getConnections, startWorkflowCompare, getWorkflowCompare, getWorkflowCompareObject, getWorkflowStatus
+  getConnections, startWorkflowCompare, getWorkflowCompare, getWorkflowCompareObject, getWorkflowStatus,
+  compareExportUrl
 } from '../lib/api';
 import { useAppStore } from '../lib/store';
 import { useAuthUser } from '../components/AuthGate';
@@ -17,6 +18,11 @@ const KINDS = [
   { key: 'escalation', label: 'Escalations' }
 ];
 const KIND_SHORT = { activeLink: 'AL', filter: 'FLT', escalation: 'ESC' };
+const EXCLUDE_KEY = 'helix-wf-compare-exclude';
+const readExclude = () => { try { return localStorage.getItem(EXCLUDE_KEY) || ''; } catch { return ''; } };
+const saveExclude = (v) => { try { localStorage.setItem(EXCLUDE_KEY, v); } catch { /* private mode etc. */ } };
+const SUGGESTED_EXCLUDES = ['zSLMGen:*'];
+
 const errorText = (e) => e?.response?.data?.error || e?.message || 'Something went wrong';
 
 // ── detail: one object, both sides ──────────────────────────────────────────
@@ -113,6 +119,7 @@ export default function WorkflowComparePage() {
   const [form, setForm] = useState('');
   const [pattern, setPattern] = useState('');
   const [kinds, setKinds] = useState({ activeLink: true, filter: true, escalation: true });
+  const [exclude, setExclude] = useState(readExclude);
   const [jobId, setJobId] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [text, setText] = useState('');
@@ -135,9 +142,12 @@ export default function WorkflowComparePage() {
     mutationFn: () => startWorkflowCompare({
       leftConnId: leftId, rightConnId: rightId,
       kinds: KINDS.map(k => k.key).filter(k => kinds[k]),
-      scope: scopeType === 'form' ? { type: 'form', form: form.trim() } : { type: 'pattern', pattern: pattern.trim() }
+      scope: {
+        ...(scopeType === 'form' ? { type: 'form', form: form.trim() } : { type: 'pattern', pattern: pattern.trim() }),
+        exclude: exclude.split(/[\n,]+/).map(x => x.trim()).filter(Boolean)
+      }
     }),
-    onSuccess: (r) => { setJobId(r.jobId); setSelected(null); setStatusFilter('all'); setText(''); }
+    onSuccess: (r) => { saveExclude(exclude); setJobId(r.jobId); setSelected(null); setStatusFilter('all'); setText(''); }
   });
 
   const job = useQuery({
@@ -233,6 +243,24 @@ export default function WorkflowComparePage() {
         </div>
 
         <div className={styles.row}>
+          <label className={`${styles.field} ${styles.grow}`}>
+            <span>
+              Exclude names <span className={styles.hintInline}>(optional; one per line or comma-separated, * is a wildcard)</span>
+            </span>
+            <input
+              className={styles.scopeInput} value={exclude} spellCheck={false}
+              placeholder="e.g. zSLMGen:*  — generated objects that legitimately differ between environments"
+              onChange={e => setExclude(e.target.value)}
+            />
+          </label>
+          {SUGGESTED_EXCLUDES.filter(x => !exclude.split(/[\n,]+/).map(p => p.trim()).includes(x)).map(x => (
+            <button key={x} type="button" className={styles.suggest} onClick={() => setExclude(e => (e.trim() ? `${e.trim()}, ${x}` : x))}>
+              + {x}
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.row}>
           {KINDS.map(k => (
             <label key={k.key} className={styles.check}>
               <input type="checkbox" checked={kinds[k.key]} onChange={e => setKinds(s => ({ ...s, [k.key]: e.target.checked }))} />
@@ -269,6 +297,7 @@ export default function WorkflowComparePage() {
                     <span title={`Only in ${rightName}`} className={styles.nRight}>{s.onlyRight} only {rightName}</span>
                     <span title="Different" className={styles.nMod}>{s.modified} different</span>
                     <span className={styles.nSame}>{s.same} identical</span>
+                    {s.excluded > 0 && <span className={styles.nSame} title="Matched an exclude pattern and were left out">{s.excluded} excluded</span>}
                   </div>
                 </div>
               );
@@ -287,6 +316,12 @@ export default function WorkflowComparePage() {
               </button>
             ))}
             <input className={styles.filter} placeholder="Filter by name…" value={text} onChange={e => setText(e.target.value)} />
+            <span className={styles.exports}>
+              <a className={styles.exportBtn} href={compareExportUrl(jobId, { format: 'md', details: true })} download
+                 title="Markdown report including what changed in each different object">Report (.md)</a>
+              <a className={styles.exportBtn} href={compareExportUrl(jobId, { format: 'csv' })} download
+                 title="One row per object, for a spreadsheet">CSV</a>
+            </span>
           </div>
 
           <div className={shared.split}>

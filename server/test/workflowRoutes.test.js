@@ -134,8 +134,8 @@ test('compare: form scope finds modified, only-in-dev, only-in-prod and ignores 
   assert.equal(job.status, 'done', job.error);
 
   const f = job.result.summary.filter;
-  assert.deepEqual({ ...f }, { left: 2, right: 3, onlyLeft: 0, onlyRight: 1, modified: 1, same: 1 });
-  assert.deepEqual(job.result.summary.activeLink, { left: 1, right: 0, onlyLeft: 1, onlyRight: 0, modified: 0, same: 0 });
+  assert.deepEqual({ ...f }, { left: 2, right: 3, onlyLeft: 0, onlyRight: 1, modified: 1, same: 1, excluded: 0 });
+  assert.deepEqual(job.result.summary.activeLink, { left: 1, right: 0, onlyLeft: 1, onlyRight: 0, modified: 0, same: 0, excluded: 0 });
 
   const items = Object.fromEntries(job.result.items.map((i) => [`${i.kind}:${i.name}`, i]));
   assert.equal(items['filter:CTM:SG:Validate'].status, 'modified');
@@ -166,7 +166,7 @@ test('compare: name-pattern scope matches across the whole server', async () => 
   const job = await waitForJob(start.json.jobId);
   assert.equal(job.status, 'done', job.error);
   // dev's name list has CTM:SG:Validate; prod's has Validate, Same, ProdOnly
-  assert.deepEqual(job.result.summary.filter, { left: 1, right: 3, onlyLeft: 0, onlyRight: 2, modified: 1, same: 0 });
+  assert.deepEqual(job.result.summary.filter, { left: 1, right: 3, onlyLeft: 0, onlyRight: 2, modified: 1, same: 0, excluded: 0 });
 });
 
 test('compare: validation, unknown jobs and a missing form surface as clear errors', async () => {
@@ -270,4 +270,117 @@ test('layout: validation, missing views and unknown forms are clear 4xx/5xx erro
     `/api/workflow/layout-compare?leftConnId=${dev.id}&rightConnId=${dev.id}&form=x&view=y`)).status, 400);
   const noForm = await call('GET', `/api/workflow/${dev.id}/layout/views?form=${encodeURIComponent('No Such')}`);
   assert.match(noForm.json.error, /does not exist/);
+});
+
+test('compare: exclude patterns drop matching objects from both sides and report how many', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const dev = conns.find((c) => c.name === 'Dev'), prod = conns.find((c) => c.name === 'Prod');
+  const run = async (scope) => {
+    const start = await call('POST', '/api/workflow/compare', { leftConnId: dev.id, rightConnId: prod.id, scope, kinds: ['filter'] });
+    assert.equal(start.status, 202);
+    return waitForJob(start.json.jobId);
+  };
+  // form scope: Prod has CTM:SG:ProdOnly; excluding it removes the only-on-Prod entry
+  const job = await run({ type: 'form', form: 'CTM:Support Group', exclude: 'CTM:SG:ProdOnly' });
+  assert.equal(job.status, 'done', job.error);
+  assert.equal(job.result.summary.filter.onlyRight, 0);
+  assert.equal(job.result.summary.filter.excluded, 1);
+  assert.deepEqual(job.scope.exclude, ['CTM:SG:ProdOnly']);
+
+  // pattern scope: excluded objects are never read
+  const p = await run({ type: 'pattern', pattern: 'CTM:SG:*', exclude: ['*Validate', '*Same'] });
+  assert.equal(p.status, 'done', p.error);
+  assert.deepEqual(p.result.summary.filter, { left: 0, right: 1, onlyLeft: 0, onlyRight: 1, modified: 0, same: 0, excluded: 2 });
+
+  // a lone * would hide everything
+  const bad = await call('POST', '/api/workflow/compare', {
+    leftConnId: dev.id, rightConnId: prod.id, scope: { type: 'form', form: 'X', exclude: '*' }
+  });
+  assert.equal(bad.status, 400);
+});
+
+// ── Recent changes ───────────────────────────────────────────────────────────
+test('recent changes: newest first, filtered by date and user, with a per-user tally', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const dev = conns.find((c) => c.name === 'Dev');
+  const q = (extra) => `/api/workflow/${dev.id}/recent?kinds=filter&${extra}`;
+
+  const all = (await call('GET', q('since=2020-01-01'))).json;
+  assert.deepEqual(all.rows.map((r) => r.name), ['CTM:SG:Validate', 'HPD:INC:ResolveStatus_100'], 'newest first');
+  assert.deepEqual(all.byUser, { Installer: 1, Demo: 1 });
+  assert.equal(all.rows[1].changedBy, 'Demo');
+  assert.equal(all.rows[1].changedAt, '2020-04-22T17:34:45.000Z');
+  assert.equal(all.rows[1].application, 'Remedy Change Management');
+  assert.equal(all.rows[0].primaryForm, 'CTM:Support Group');
+  assert.deepEqual(all.counts, { filter: 2 });
+
+  const recent = (await call('GET', q('since=2020-06-01'))).json;
+  assert.deepEqual(recent.rows.map((r) => r.name), ['CTM:SG:Validate']);
+
+  const demo = (await call('GET', q('since=2020-01-01&user=demo'))).json;
+  assert.deepEqual(demo.rows.map((r) => r.name), ['HPD:INC:ResolveStatus_100']);
+  assert.deepEqual(demo.byUser, { Installer: 1, Demo: 1 }, 'tally ignores the user filter so other names stay selectable');
+});
+
+test('recent changes: bad input is a clear 400', async () => {
+  const dev = (await call('GET', '/api/connections')).json.find((c) => c.name === 'Dev');
+  const get = (qs) => call('GET', `/api/workflow/${dev.id}/recent?${qs}`);
+  assert.equal((await get('days=0')).status, 400);
+  assert.equal((await get('days=abc')).status, 400);
+  assert.equal((await get('since=not-a-date')).status, 400);
+  assert.equal((await get('since=2999-01-01')).status, 400);
+  assert.equal((await get('days=7&kinds=nope')).status, 400);
+  assert.equal((await get('days=3650&kinds=escalation')).status, 200, 'a long window with nothing in it is fine');
+});
+
+// ── Exports ──────────────────────────────────────────────────────────────────
+const download = async (p) => {
+  const res = await fetch(base + p);
+  return { status: res.status, type: res.headers.get('content-type'), disposition: res.headers.get('content-disposition'), text: await res.text() };
+};
+
+test('export: compare report downloads as Markdown with details, or CSV', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const dev = conns.find((c) => c.name === 'Dev'), prod = conns.find((c) => c.name === 'Prod');
+  const start = await call('POST', '/api/workflow/compare', {
+    leftConnId: dev.id, rightConnId: prod.id, scope: { type: 'form', form: 'CTM:Support Group' }, kinds: ['filter']
+  });
+  const job = await waitForJob(start.json.jobId);
+  assert.equal(job.status, 'done', job.error);
+
+  const md = await download(`/api/workflow/compare/${start.json.jobId}/export?format=md&details=1`);
+  assert.equal(md.status, 200);
+  assert.match(md.type, /text\/markdown/);
+  assert.match(md.disposition, /^attachment; filename="workflow-compare_Dev-vs-Prod_CTM-Support-Group-\d{4}-\d{2}-\d{2}\.md"$/);
+  assert.match(md.text, /# Workflow compare: Dev vs Prod/);
+  assert.match(md.text, /\| Filter \| `CTM:SG:Validate` \| Run If \|/);
+  assert.match(md.text, /### Filter: CTM:SG:Validate/);
+  assert.match(md.text, /'Company' = "Calbro"/);
+  assert.match(md.text, /'Company' = "Federal"/);
+
+  const plain = await download(`/api/workflow/compare/${start.json.jobId}/export?format=md`);
+  assert.doesNotMatch(plain.text, /## Details/, 'details are opt-in');
+
+  const csv = await download(`/api/workflow/compare/${start.json.jobId}/export?format=csv`);
+  assert.match(csv.type, /text\/csv/);
+  assert.match(csv.disposition, /\.csv"$/);
+  assert.match(csv.text, /Filter,CTM:SG:Validate,Different,Run If/);
+
+  assert.equal((await download('/api/workflow/compare/nope/export')).status, 404);
+});
+
+test('export: layout compare and recent changes', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const dev = conns.find((c) => c.name === 'Dev'), prod = conns.find((c) => c.name === 'Prod');
+  const lay = await download(`/api/workflow/layout-compare/export?leftConnId=${dev.id}&rightConnId=${prod.id}&form=${encodeURIComponent('HPD:Help Desk')}&view=${encodeURIComponent('Default Admin View')}&format=md`);
+  assert.equal(lay.status, 200);
+  assert.match(lay.text, /# Form layout compare: HPD:Help Desk/);
+  assert.match(lay.text, /\| `Status` \| 2 \| Label \| Status \| State \|/);
+  assert.match(lay.text, /`Dev only` — only on Dev/, 'a view that exists on one instance only is called out by its label');
+
+  const rec = await download(`/api/workflow/${dev.id}/recent/export?kinds=filter&since=2020-01-01&format=csv`);
+  assert.equal(rec.status, 200);
+  assert.match(rec.disposition, /recent-changes_Dev-\d{4}-\d{2}-\d{2}\.csv/);
+  assert.match(rec.text, /CTM:SG:Validate/);
+  assert.match(rec.text, /HPD:INC:ResolveStatus_100/);
 });
