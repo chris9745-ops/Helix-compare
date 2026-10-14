@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnections, createConnection, deleteConnection, testConnection } from '../lib/api';
+import { getConnections, createConnection, deleteConnection, testConnection, updateConnection } from '../lib/api';
 import { useAppStore } from '../lib/store';
 import { useAuthUser } from '../components/AuthGate';
 import PageHeader from '../components/PageHeader';
@@ -98,6 +98,19 @@ function ConnectionCard({ conn }) {
   const qc = useQueryClient();
 
   const isActive = activeConnectionId === conn.id;
+  const [changing, setChanging] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const locked = conn.passwordReadable === false;
+
+  const { mutate: savePassword, isPending: savingPw, error: pwError } = useMutation({
+    mutationFn: () => updateConnection(conn.id, { password: newPassword }),
+    onSuccess: () => {
+      setNewPassword('');
+      setChanging(false);
+      setTestStatus(null);
+      qc.invalidateQueries(['connections']);
+    }
+  });
 
   const { mutate: remove } = useMutation({
     mutationFn: deleteConnection,
@@ -130,6 +143,35 @@ function ConnectionCard({ conn }) {
         </div>
       </div>
 
+      {locked && (
+        <div className={`${styles.testResult} ${styles.error}`}>
+          <div>🔒 The saved password can't be read on this computer.</div>
+          <div className={styles.testHint}>
+            This happens when the app's data was copied from another computer or the secure storage was reset.
+            Enter the password again to use this connection.
+          </div>
+        </div>
+      )}
+
+      {(changing || locked) && (
+        <form
+          className={styles.pwForm}
+          onSubmit={e => { e.preventDefault(); if (newPassword) savePassword(); }}
+        >
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder={`New password for ${conn.username}`}
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            autoFocus={changing}
+          />
+          <Button type="submit" size="sm" variant="primary" loading={savingPw} disabled={!newPassword}>Save password</Button>
+          {!locked && <Button size="sm" variant="ghost" onClick={() => { setChanging(false); setNewPassword(''); }}>Cancel</Button>}
+          {pwError && <span className={styles.pwError}>{pwError.response?.data?.error || pwError.message}</span>}
+        </form>
+      )}
+
       {testStatus && (
         <div className={`${styles.testResult} ${styles[testStatus]}`}>
           {testStatus === 'testing' && '⟳ Testing connection…'}
@@ -146,9 +188,12 @@ function ConnectionCard({ conn }) {
       )}
 
       <div className={styles.cardActions}>
-        <Button size="sm" onClick={handleTest} loading={testStatus === 'testing'}>
+        <Button size="sm" onClick={handleTest} loading={testStatus === 'testing'} disabled={locked}>
           Test auth
         </Button>
+        {!changing && !locked && (
+          <Button size="sm" variant="ghost" onClick={() => setChanging(true)}>Change password</Button>
+        )}
         <Button
           size="sm"
           variant={isActive ? 'ghost' : 'primary'}

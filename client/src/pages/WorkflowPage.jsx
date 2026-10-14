@@ -8,6 +8,7 @@ import { useAppStore } from '../lib/store';
 import { useAuthUser } from '../components/AuthGate';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
+import { GatewayPanel } from '../components/GatewayStatus';
 import styles from './WorkflowPage.module.css';
 
 const KINDS = [
@@ -264,7 +265,12 @@ export default function WorkflowPage() {
     );
   }
 
-  const header = <PageHeader title="Workflow" subtitle="Active Links, Filters and Escalations — read-only, via the native AR API" />;
+  const header = (
+    <>
+      <PageHeader title="Workflow" subtitle="Active Links, Filters and Escalations — read-only, via the native AR API" />
+      <GatewayPanel />
+    </>
+  );
 
   if (!conn) {
     return (

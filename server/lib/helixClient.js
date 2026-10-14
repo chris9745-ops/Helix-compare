@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { assertPasswordUsable } = require('./connectionGuard');
 const http = require('http');
 const https = require('https');
 
@@ -42,6 +43,7 @@ function makeClient(connection, contentType = 'application/json') {
 }
 
 async function getToken(connection) {
+  assertPasswordUsable(connection);
   const cached = tokenCache.get(connection.id);
   if (cached && cached.expiresAt > Date.now() + 60000) {
     return cached.token;

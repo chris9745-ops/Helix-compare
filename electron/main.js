@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, safeStorage } = require('electron');
 const path = require('path');
 
 let mainWindow;
@@ -11,8 +11,15 @@ function ensureServer() {
   if (!serverReady) {
     // Store connections outside the app bundle so they survive updates/reinstalls.
     process.env.HELIX_DATA_DIR = path.join(app.getPath('userData'), 'data');
-    const { start } = require('../server/index.js');
-    serverReady = start();
+    // Saved Helix passwords are sealed with the OS credential store (macOS Keychain / Windows DPAPI).
+    // Must be in place before the server loads its connection store, which migrates old plaintext files.
+    require('../server/lib/secretBox').setOsProvider({
+      isAvailable: () => safeStorage.isEncryptionAvailable(),
+      encrypt: (s) => safeStorage.encryptString(s),
+      decrypt: (b) => safeStorage.decryptString(b)
+    });
+    const { start, autoStartGateway } = require('../server/index.js');
+    serverReady = start().then((server) => { autoStartGateway(); return server; });
   }
   return serverReady;
 }

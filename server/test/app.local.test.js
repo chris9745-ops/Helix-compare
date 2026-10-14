@@ -49,9 +49,32 @@ test('create keeps authString and ignoreSSL, never returns the password', async 
   assert.equal(list.length, 1);
   assert.equal(list[0].password, undefined);
 
-  // Local mode keeps the existing on-disk behaviour (plaintext, per-user file)
-  const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, 'connections.json'), 'utf8'));
-  assert.equal(onDisk.connections[0].password, 'pw');
+  // Saved passwords are sealed on disk — the plaintext is nowhere in the file
+  const raw = fs.readFileSync(path.join(dataDir, 'connections.json'), 'utf8');
+  const onDisk = JSON.parse(raw);
+  assert.equal(onDisk.connections[0].password, undefined);
+  assert.match(onDisk.connections[0].passwordEnc, /^hdt1:/);
+  assert.ok(!raw.includes('"pw"'));
+});
+
+test('changing a password through the API seals it, keeps it hidden, and flags readability', async () => {
+  const [conn] = (await call('GET', '/api/connections')).json;
+  assert.equal(conn.passwordReadable, true);
+
+  const upd = await call('PUT', `/api/connections/${conn.id}`, { password: 'Brand-New-pw-77', name: 'Dev (updated)' });
+  assert.equal(upd.status, 200);
+  assert.equal(upd.json.name, 'Dev (updated)');
+  assert.equal(upd.json.password, undefined);
+  assert.equal(upd.json.passwordEnc, undefined);
+  assert.equal(upd.json.passwordReadable, true);
+  assert.ok(!fs.readFileSync(path.join(dataDir, 'connections.json'), 'utf8').includes('Brand-New-pw-77'));
+
+  // a client can't write the sealed field directly
+  const sneaky = await call('PUT', `/api/connections/${conn.id}`, { passwordEnc: 'hdt1:file:AAAA', id: 'x' });
+  assert.equal(sneaky.status, 200);
+  const disk = JSON.parse(fs.readFileSync(path.join(dataDir, 'connections.json'), 'utf8')).connections[0];
+  assert.equal(disk.id, conn.id);
+  assert.notEqual(disk.passwordEnc, 'hdt1:file:AAAA');
 });
 
 test('validation and not-found errors come back as 4xx, not 500', async () => {

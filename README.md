@@ -54,8 +54,13 @@ helper (`workflow-helper/ar-helper.js`) that runs on the JDK's built-in Nashorn 
 
 One-time setup:
 
-1. **Run the Client Gateway** with the `kwic-config.xml` BMC gave you. It exposes a local port per environment
-   (for HMS: `46000` Dev, `47000` QA, `48000` Prod).
+1. **The Client Gateway** — the `kwic-config.xml` BMC gave you plus the Kaazing KWIC runtime. It exposes a
+   local port per environment (for HMS: `46000` Dev, `47000` QA, `48000` Prod). Put them in a folder that
+   holds `conf/kwic-config.xml` and `lib/` — by default `gateway/kwic` next to the app's data folder
+   (`~/Library/Application Support/helix-dev-tool/gateway/kwic` on a Mac). The **Workflow** page then has a
+   *Client Gateway* panel with **Start gateway / Stop**, the ports it opens, a log, and an option to start it
+   when the app opens. The app stops a gateway it started when it quits. If one is already running from a
+   terminal the panel says so and leaves it alone. The sidebar shows its state on every page.
 2. **Java 8–14** on the machine (Nashorn was removed in Java 15). Point `HELIX_JAVA` at it if it isn't first on `PATH`.
 3. **The AR API jars** from your own Developer Studio kit (`arapi*.jar` and its companion jars in the
    `com.bmc.arsys.studio.api_*/lib` folder). They are BMC's, so this repo does not ship them. Open **Workflow →
@@ -207,14 +212,23 @@ and the NSIS output in `release/win-unpacked/` first.
 If your Helix instance uses a self-signed certificate, enable **Ignore SSL** when adding the connection.
 The backend uses Node's `https.Agent({ rejectUnauthorized: false })` for those connections only.
 
-## Security note on distributing this
+## Saved passwords
 
-Connections (including passwords) are stored in **plaintext** in each user's local
-`connections.json` — fine for a single person running this on their own machine, but
-worth knowing before handing the packaged app to a wider group: anyone with file
-access to that machine/user account can read saved Helix credentials. If this needs
-to go beyond a small trusted team, encrypting that file (e.g. via the OS keychain
-through Electron's `safeStorage` API) would be the next thing to add.
+Saved Helix passwords are **encrypted**, never written in the clear:
+
+- **Desktop app:** sealed with the operating system's credential store (Electron `safeStorage`: macOS
+  Keychain, Windows DPAPI). The key is not in the data folder, so a copied, synced or backed-up
+  `connections.json` is useless on its own. On macOS, an unsigned app that is rebuilt can make the Keychain ask
+  once for permission to use its item — choose *Always Allow*.
+- **`npm run dev`:** there is no OS store, so AES-256-GCM with a random key in `.secret-key` (mode 0600) beside
+  the data is used. That keeps passwords out of a plaintext file that gets synced or pasted into a bug report; it
+  does **not** protect against another process running as the same user.
+- **Upgrading:** a file written by an older version (plaintext) is converted the first time it is loaded. Each
+  password is re-opened to verify before its plaintext is dropped. After that an older build cannot read the
+  file, so don't switch back.
+- **If a password can't be decrypted** (the data folder was copied to another computer, the credential store
+  was reset) the connection shows a lock notice and asks for the password again; nothing is sent empty.
+- The hosted site is unchanged: server-side AES-256-GCM, key in an environment variable.
 
 ## Roadmap
 
