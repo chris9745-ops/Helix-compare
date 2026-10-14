@@ -180,40 +180,55 @@ function need() { if (!ctx) throw new Error('Not connected — send a connect re
 
 var READ_ONLY = /^(get|verify)[A-Za-z]*$/;
 
-/** Invoke a server-context method by name using JSON-typed args (Nashorn can't apply() Java methods). */
-function invoke(name, args) {
-  var ms = ARServerUser.class.getMethods(), last = null;
+// invoke:begin -- extracted verbatim by server/test/helperInvoke.test.js, so keep it self-contained
+/**
+ * Call a public method on `target` by name with JSON-typed args. Several Java overloads usually share
+ * a name and argument count (getListActiveLink(String) vs getListActiveLink(long)), and getMethods()
+ * returns them in no guaranteed order — so an overload is only a candidate when EVERY argument has
+ * the JS type its parameter needs. A string is never coerced to a number, and vice versa.
+ * (Nashorn can't apply() Java methods, and a JS array would demote Long/Integer to doubles, hence the
+ * explicit Object[].)
+ */
+function invokeOn(target, name, args) {
+  var ms = target.getClass().getMethods(), last = null, candidates = 0, sameArity = 0;
   var RArray = java.lang.reflect.Array;
   for (var i = 0; i < ms.length; i++) {
     var m = ms[i];
     if (String(m.getName()) !== name) continue;
     var types = m.getParameterTypes();
     if (types.length !== args.length) continue;
-    // Box into a real Java Object[] — a JS array would demote Long/Integer to doubles.
+    sameArity++;
     var jargs = RArray.newInstance(java.lang.Object.class, types.length), ok = true;
     for (var j = 0; j < types.length && ok; j++) {
-      var tn = String(types[j].getName()), v = args[j];
+      var tn = String(types[j].getName()), v = args[j], isNum = typeof v === 'number' && isFinite(v);
       if (v === null || v === undefined) RArray.set(jargs, j, null);
-      else if (tn === 'long') RArray.set(jargs, j, new java.lang.Long(String(v)));
-      else if (tn === 'int') RArray.set(jargs, j, new java.lang.Integer(String(v)));
-      else if (tn === 'boolean') RArray.set(jargs, j, new java.lang.Boolean(!!v));
+      else if (tn === 'long' && isNum) RArray.set(jargs, j, new java.lang.Long(String(Math.floor(v))));
+      else if (tn === 'int' && isNum) RArray.set(jargs, j, new java.lang.Integer(String(Math.floor(v))));
+      else if (tn === 'boolean' && typeof v === 'boolean') RArray.set(jargs, j, new java.lang.Boolean(v));
       else if (tn === 'java.lang.String' && typeof v === 'string') RArray.set(jargs, j, v);
       else if (tn === 'java.util.List' && Array.isArray(v)) {
         var al = new java.util.ArrayList();
         for (var q = 0; q < v.length; q++) al.add(String(v[q]));
         RArray.set(jargs, j, al);
       }
-      else if (tn === '[I') RArray.set(jargs, j, Java.to(v, 'int[]'));
-      else if (tn === '[Ljava.lang.String;') RArray.set(jargs, j, Java.to(v, 'java.lang.String[]'));
-      else ok = false;                              // a parameter type we can't build from JSON
+      else if (tn === '[I' && Array.isArray(v)) RArray.set(jargs, j, Java.to(v, 'int[]'));
+      else if (tn === '[Ljava.lang.String;' && Array.isArray(v)) RArray.set(jargs, j, Java.to(v, 'java.lang.String[]'));
+      else ok = false;                              // this overload can't take these arguments
     }
     if (!ok) continue;
-    try { return m.invoke(ctx, jargs); }
+    candidates++;
+    try { return m.invoke(target, jargs); }
     catch (e) { last = e.cause || e; }
   }
   if (last) throw last;
-  throw new Error('No ' + name + ' overload takes these ' + args.length + ' argument(s).');
+  throw new Error(sameArity === 0
+    ? 'No ' + name + ' overload takes ' + args.length + ' argument(s).'
+    : 'No ' + name + ' overload accepts arguments of those types.');
 }
+// invoke:end
+
+/** Server-context call (see invokeOn). */
+function invoke(name, args) { return invokeOn(ctx, name, args); }
 
 var KINDS = {
   activeLink: { list: 'getListActiveLink', get: 'getActiveLink' },
