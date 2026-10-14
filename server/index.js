@@ -19,8 +19,15 @@ function start(port = PORT) {
   });
 }
 
+// Start the gateway on launch when the user turned that on. Deliberately not inside start(), which
+// the tests call; only the real entry points (here and Electron's main) do this.
+function autoStartGateway() {
+  if (require('./config').isHosted()) return;
+  require('./lib/gateway').getGateway().autoStartIfConfigured();
+}
+
 if (require.main === module) {
-  start().catch(err => {
+  start().then(autoStartGateway).catch(err => {
     console.error(err.code === 'EADDRINUSE'
       ? `Port ${PORT} is already in use — is another copy of Helix Dev Tool running?`
       : err);
@@ -28,4 +35,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, start };
+module.exports = { app, start, autoStartGateway };

@@ -18,8 +18,8 @@ function ensureServer() {
       encrypt: (s) => safeStorage.encryptString(s),
       decrypt: (b) => safeStorage.decryptString(b)
     });
-    const { start } = require('../server/index.js');
-    serverReady = start();
+    const { start, autoStartGateway } = require('../server/index.js');
+    serverReady = start().then((server) => { autoStartGateway(); return server; });
   }
   return serverReady;
 }

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../lib/store';
 import { getConnections } from '../lib/api';
 import { useAuthUser } from './AuthGate';
+import { GatewayPill } from './GatewayStatus';
 import styles from './Shell.module.css';
 
 const NAV = [
@@ -85,6 +86,7 @@ export default function Shell() {
         </nav>
 
         <div className={styles.sidebarFooter}>
+          {!authUser?.hosted && <GatewayPill onClick={() => navigate('/workflow')} />}
           {authUser && (
             <div className={styles.userRow}>
               <span className={styles.userEmail} title={authUser.email}>{authUser.email}</span>

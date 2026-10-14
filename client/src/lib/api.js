@@ -65,6 +65,13 @@ export const compareData = ({ leftConnId, rightConnId, formName, keyField, qLeft
 export const compareFields = ({ leftConnId, rightConnId, formName, keyField }) =>
   api.post('/compare/fields', { leftConnId, rightConnId, formName, keyField }).then(r => r.data);
 
+// ── Client Gateway (start/stop from the app) — desktop only ──────────────────
+export const getGatewayStatus = () => api.get('/gateway/status').then(r => r.data);
+export const startGateway = () => api.post('/gateway/start').then(r => r.data);
+export const stopGateway = () => api.post('/gateway/stop').then(r => r.data);
+export const getGatewayLog = (lines = 80) => api.get('/gateway/log', { params: { lines } }).then(r => r.data.lines);
+export const saveGatewaySettings = (settings) => api.put('/gateway/settings', settings).then(r => r.data);
+
 // ── Workflow (Active Links / Filters / Escalations) — desktop app only ─────────
 // Goes through the native AR API via the BMC Client Gateway; REST can't see these objects.
 export const getWorkflowStatus = () => api.get('/workflow/status').then(r => r.data);
