@@ -384,3 +384,101 @@ test('export: layout compare and recent changes', async () => {
   assert.match(rec.text, /CTM:SG:Validate/);
   assert.match(rec.text, /HPD:INC:ResolveStatus_100/);
 });
+
+// ── Definition export ────────────────────────────────────────────────────────
+test('export: choose a folder, download one object, and the guard rails around both', async () => {
+  const dev = (await call('GET', '/api/connections')).json.find((c) => c.name === 'Dev');
+  assert.deepEqual((await call('GET', '/api/workflow/export-folder')).json, { dir: '', exists: false });
+  assert.equal((await call('PUT', '/api/workflow/export-folder', { dir: '  ' })).status, 400);
+  assert.equal((await call('PUT', '/api/workflow/export-folder', { dir: '/dev/null/nope' })).status, 400);
+
+  const one = await fetch(`${base}/api/workflow/${dev.id}/export`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ items: [{ kind: 'filter', name: 'HPD:INC:ResolveStatus_100' }] })
+  });
+  assert.equal(one.status, 200);
+  assert.match(one.headers.get('content-disposition'), /^attachment; filename="Dev_HPD-INC-ResolveStatus_100_\d{4}-\d{2}-\d{2}\.def"$/);
+  const text = await one.text();
+  assert.match(text, /^char-set: UTF-8/);
+  assert.match(text, /begin filter\n {3}name : HPD:INC:ResolveStatus_100/);
+
+  const xml = await fetch(`${base}/api/workflow/${dev.id}/export`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ items: [{ kind: 'filter', name: 'HPD:INC:ResolveStatus_100' }], format: 'xml' })
+  });
+  assert.match(xml.headers.get('content-disposition'), /\.xml"$/);
+  assert.match(await xml.text(), /^<\?xml/);
+
+  const post = (body) => call('POST', `/api/workflow/${dev.id}/export`, body);
+  assert.equal((await post({ items: [] })).status, 400);
+  assert.equal((await post({ items: [{ kind: 'widget', name: 'x' }] })).status, 400);
+  assert.equal((await post({ scope: { type: 'form', form: ' ' } })).status, 400);
+  const missing = await post({ items: [{ kind: 'filter', name: 'No Such Filter' }] });
+  assert.equal(missing.status, 404, 'an object that is gone is a 404, not a server error');
+  assert.match(missing.json.error, /does not exist/);
+  assert.equal((await post({ items: [{ kind: 'filter', name: 'HPD:INC:ResolveStatus_100' }], save: true })).status, 400,
+    'saving needs a folder first');
+});
+
+test('export: a form\'s whole workflow saved to the folder, with a manifest', async () => {
+  const dev = (await call('GET', '/api/connections')).json.find((c) => c.name === 'Dev');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'helix-exports-'));
+  try {
+    assert.equal((await call('PUT', '/api/workflow/export-folder', { dir })).json.dir, dir);
+    const r = await call('POST', `/api/workflow/${dev.id}/export`, {
+      scope: { type: 'form', form: 'HPD:Help Desk', includeForm: true }, save: true
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.objects, 3);                       // 1 active link + 1 filter + the form
+    assert.equal(r.json.saved.length, 1);
+    const file = r.json.saved[0].path;
+    assert.equal(path.dirname(file), dir);
+    const def = fs.readFileSync(file, 'utf8');
+    assert.match(def, /begin schema\n {3}name : HPD:Help Desk/);
+    assert.match(def, /begin active link\n {3}name : HPD:INC:ClearVendor_100/);
+    assert.match(def, /begin filter\n {3}name : HPD:INC:ResolveStatus_100/);
+
+    const manifest = fs.readFileSync(r.json.manifestPath, 'utf8');
+    assert.match(manifest, /Everything attached to form HPD:Help Desk/);
+    assert.match(manifest, /\*\*Forms \(1\)\*\*/);
+    assert.match(manifest, /Not checked against a target/);
+
+    // exporting again never overwrites the earlier file
+    const again = await call('POST', `/api/workflow/${dev.id}/export`, {
+      scope: { type: 'form', form: 'HPD:Help Desk', includeForm: true }, save: true
+    });
+    assert.notEqual(again.json.saved[0].path, file);
+    assert.ok(fs.existsSync(file));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('export: from a compare — only-on-Dev and different, with forms missing on the target reported', async () => {
+  const conns = (await call('GET', '/api/connections')).json;
+  const dev = conns.find((c) => c.name === 'Dev'), prod = conns.find((c) => c.name === 'Prod');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'helix-exports-'));
+  try {
+    await call('PUT', '/api/workflow/export-folder', { dir });
+    const start = await call('POST', '/api/workflow/compare', {
+      leftConnId: dev.id, rightConnId: prod.id, scope: { type: 'form', form: 'CTM:Support Group' }, kinds: ['filter', 'activeLink']
+    });
+    const job = await waitForJob(start.json.jobId);
+    assert.equal(job.status, 'done', job.error);
+
+    const bad = await call('POST', `/api/workflow/compare/${start.json.jobId}/export-def`, { include: ['onlyRight'] });
+    assert.equal(bad.status, 400, 'only objects that exist on the source side can be exported');
+
+    const r = await call('POST', `/api/workflow/compare/${start.json.jobId}/export-def`, { include: ['onlyLeft', 'modified'], save: true });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.objects, 2);            // DevOnlyAL (only on Dev) + Validate (different); Same is identical
+    const def = fs.readFileSync(r.json.saved[0].path, 'utf8');
+    assert.match(def, /name : CTM:SG:DevOnlyAL/);
+    assert.match(def, /name : CTM:SG:Validate/);
+    assert.doesNotMatch(def, /name : CTM:SG:Same/, 'identical objects are not exported');
+    assert.doesNotMatch(def, /name : CTM:SG:ProdOnly/, 'objects that only exist on the target are not exported');
+    assert.deepEqual(r.json.missingForms, ['CTM:Support Group'], 'the target does not have the form the objects are attached to');
+
+    const manifest = fs.readFileSync(r.json.manifestPath, 'utf8');
+    assert.match(manifest, /\*\*Intended target:\*\* Prod/);
+    assert.match(manifest, /Missing on Prod[\s\S]*- `CTM:Support Group`/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

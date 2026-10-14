@@ -9,6 +9,7 @@ import { useAuthUser } from '../components/AuthGate';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
 import { GatewayPanel } from '../components/GatewayStatus';
+import ExportDef from '../components/ExportDef';
 import styles from './WorkflowPage.module.css';
 
 const KINDS = [
@@ -156,7 +157,15 @@ export function Detail({ connId, kind, name }) {
   return (
     <div className={styles.detail}>
       <div className={styles.detailHead}>
-        <div className={styles.detailName}>{d.name}</div>
+        <div className={styles.detailTop}>
+          <div className={styles.detailName}>{d.name}</div>
+          <ExportDef
+            endpoint={`/workflow/${connId}/export`}
+            body={{ items: [{ kind, name }] }}
+            count={1}
+            note="Exports this object in the server's own definition format. Overlaid objects come with their overlay."
+          />
+        </div>
         <div className={styles.detailBadges}>
           <Badge tone="purple">{d.kindLabel}</Badge>
           <Badge tone={d.enabled ? 'green' : 'red'}>{d.enabled ? 'Enabled' : 'Disabled'}</Badge>
@@ -213,6 +222,8 @@ export default function WorkflowPage() {
   const [kind, setKind] = useState('activeLink');
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(null);   // { kind, name }
+  const [exportKinds, setExportKinds] = useState({ activeLink: true, filter: true, escalation: true });
+  const [includeForm, setIncludeForm] = useState(false);
 
   const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: getConnections });
   const conn = connections.find(c => c.id === activeConnectionId);
@@ -360,6 +371,40 @@ export default function WorkflowPage() {
 
       <div className={styles.split}>
         <aside className={styles.listPane}>
+          {mode === 'form' && byForm.data && (
+            <div className={styles.listExport}>
+              <ExportDef
+                label="Export this form's workflow…"
+                align="left"
+                endpoint={`/workflow/${activeConnectionId}/export`}
+                body={{
+                  scope: {
+                    type: 'form', form: submittedForm,
+                    kinds: KINDS.map(k => k.key).filter(k => exportKinds[k]), includeForm
+                  }
+                }}
+                count={
+                  KINDS.filter(k => exportKinds[k.key]).reduce((n, k) => n + (byForm.data[k.listKey]?.length || 0), 0)
+                  + (includeForm ? 1 : 0)
+                }
+                disabled={!KINDS.some(k => exportKinds[k.key]) && !includeForm}
+                note="Everything attached to this form, as one definition file (several if there are more than 500)."
+              >
+                <div className={styles.exportOpts}>
+                  {KINDS.map(k => (
+                    <label key={k.key}>
+                      <input type="checkbox" checked={exportKinds[k.key]} onChange={e => setExportKinds(x => ({ ...x, [k.key]: e.target.checked }))} />
+                      {k.label} ({byForm.data[k.listKey]?.length || 0})
+                    </label>
+                  ))}
+                  <label>
+                    <input type="checkbox" checked={includeForm} onChange={e => setIncludeForm(e.target.checked)} />
+                    The form definition itself (fields and views — large)
+                  </label>
+                </div>
+              </ExportDef>
+            </div>
+          )}
           <div className={styles.kindTabs}>
             {KINDS.map(k => (
               <button key={k.key} className={kind === k.key ? styles.kindOn : ''} onClick={() => setKind(k.key)}>

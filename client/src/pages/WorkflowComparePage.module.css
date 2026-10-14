@@ -94,3 +94,6 @@
   color: var(--text-primary); padding: 5px 12px; font-size: 12px; text-decoration: none;
 }
 .exportBtn:hover { border-color: var(--accent); }
+
+.exportOpts { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; font-size: 13px; color: var(--text-secondary); }
+.exportOpts label { display: flex; align-items: center; gap: 8px; }

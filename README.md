@@ -39,6 +39,14 @@ from one codebase:
 - **Recent changes** *(desktop only)* — everything changed on an instance since a date (24 h … 90 days or a
   date), newest first, with a per-person tally to filter by, optional form scope, and the object's current
   definition one click away. Markdown report or CSV export.
+- **Export definitions (.def / .xml)** *(desktop only)* — the server's own definition export (the format Dev
+  Studio's *Export* and `arexport` produce), for one object, everything attached to a form (optionally with the
+  form definition), or straight from a compare (objects only on the source side and/or different). Saved to a
+  folder you choose together with a **manifest** (source, objects, how many definitions are really in the files,
+  and the forms they depend on — with the ones missing on the target called out), or downloaded as one file.
+  Large exports are split into files of 500 objects, each importable on its own. Read-only on the server;
+  importing stays in your normal BMC process. See [docs/using-with-claude.md](docs/using-with-claude.md) for
+  instructions to give a Claude project that needs to read these files.
 - **Form layout** *(desktop only)* — a form's views and where every field sits: a wireframe with the form's tab
   pages selectable, a sortable field table (label, ID, type, visibility, tab order, position, container), and a
   **Dev vs Prod** mode that outlines changed / Dev-only / Prod-only fields and lists views missing on one side.

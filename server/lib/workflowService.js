@@ -15,6 +15,7 @@ const readline = require('readline');
 const { describeObject, referencedForms } = require('./arRender');
 const arLayout = require('./arLayout');
 const { assertPasswordUsable } = require('./connectionGuard');
+const defExport = require('./defExport');
 
 const KINDS = ['activeLink', 'filter', 'escalation'];
 const REQUEST_TIMEOUT_MS = 180000;
@@ -303,6 +304,37 @@ class WorkflowService {
     const rows = (u ? all.filter((r) => r.changedBy.toLowerCase() === u) : all)
       .sort((a, b) => (b.changedAt || '').localeCompare(a.changedAt || '') || a.name.localeCompare(b.name));
     return { since: since.toISOString(), kinds: wanted, form: form || null, counts, byUser, rows };
+  }
+
+  /**
+   * The server's own definition export for objects [{kind,name}] (already validated/sorted), in
+   * files of at most PART_SIZE objects. format: 'def' | 'xml'. Read-only on the server.
+   */
+  async exportDefs(conn, items, format = 'def') {
+    if (!['def', 'xml'].includes(format)) throw httpError(400, 'format must be "def" or "xml".');
+    const parts = [];
+    for (const part of defExport.chunk(items)) {
+      const r = await this._request(conn, 'exportDef', { items: defExport.toHelperItems(part), format }, REQUEST_TIMEOUT_MS);
+      if (!r || !r.text) throw httpError(502, 'The server returned an empty export. Check that these objects still exist.');
+      parts.push({ count: part.length, text: r.text, items: part });
+    }
+    return parts;
+  }
+
+  /** Forms the workflow objects are attached to or refer to — what must exist on the import target. */
+  async exportDependencies(conn, items) {
+    const attached = new Set(), referenced = new Set();
+    for (const kind of KINDS) {
+      const names = items.filter((i) => i.kind === kind).map((i) => i.name);
+      if (!names.length) continue;
+      const defs = await this.fetchObjects(conn, kind, { names });
+      for (const raw of defs.values()) {
+        (raw.formList || []).forEach((f) => attached.add(f));
+        referencedForms(raw).forEach((f) => referenced.add(f));
+      }
+    }
+    for (const i of items) if (i.kind === 'form') referenced.add(i.name);
+    return { attachedForms: [...attached], referencedForms: [...referenced] };
   }
 
   /** A form's views (base views first). */

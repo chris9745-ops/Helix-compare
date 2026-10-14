@@ -8,6 +8,8 @@ const { isHosted } = require('../config');
 const workflow = require('../lib/workflowService');
 const { CompareJobs, changesBetween } = require('../lib/workflowCompare');
 const reports = require('../lib/reports');
+const defExport = require('../lib/defExport');
+const fs = require('fs');
 
 /** Send a generated report as a file download (md or csv). */
 function sendReport(res, { format, base, md, csv }) {
@@ -18,6 +20,105 @@ function sendReport(res, { format, base, md, csv }) {
 }
 
 const MAX_REPORT_DETAILS = 150;
+
+// ── Definition export (.def / .xml) ─────────────────────────────────────────
+const exportDir = () => workflow.readSettings(dataDir()).exportDir || '';
+
+function checkFolder(raw) {
+  const dir = path.resolve(String(raw || '').trim().replace(/^~(?=$|[\\/])/, process.env.HOME || '~'));
+  if (!raw || !String(raw).trim()) {
+    const err = new Error('Enter a folder to save exports in.');
+    err.status = 400;
+    throw err;
+  }
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const probe = path.join(dir, `.write-test-${process.pid}`);
+    fs.writeFileSync(probe, '');
+    fs.rmSync(probe);
+  } catch (e) {
+    const err = new Error(`That folder can't be written to: ${e.code || e.message}`);
+    err.status = 400;
+    throw err;
+  }
+  return dir;
+}
+
+/** First free path: name.def, name-2.def, … so a repeated export never silently overwrites a file. */
+function freePath(dir, file) {
+  const ext = path.extname(file), stem = file.slice(0, file.length - ext.length);
+  let candidate = path.join(dir, file), n = 2;
+  while (fs.existsSync(candidate)) candidate = path.join(dir, `${stem}-${n++}${ext}`);
+  return candidate;
+}
+
+/**
+ * Export `items` from `conn`. With `save` the files (and a manifest) are written to the export folder
+ * and a JSON summary is returned; otherwise a single .def/.xml is returned as a download.
+ * `target` (optional) is the instance the objects are meant for: forms missing there are reported.
+ */
+async function runExport(res, { conn, target, items, format, label, scope, save }) {
+  const list = defExport.sortItems(defExport.normalizeItems(items));
+  const fmt = String(format || 'def').toLowerCase() === 'xml' ? 'xml' : 'def';
+  const dir = save ? exportDir() : null;
+  if (save && !dir) {
+    return res.status(400).json({ error: 'Choose a folder for exports first (Export folder), then try again.' });
+  }
+  const parts = await svc().exportDefs(conn, list, fmt);
+  if (!save && parts.length > 1) {
+    return res.status(400).json({
+      error: `This export is ${parts.length} files long (${list.length} objects). Use "Save to folder" so all parts are written together.`
+    });
+  }
+  const base = reports.slug(`${conn.name}_${label || 'export'}_${reports.day(new Date())}`);
+  const files = parts.map((p, i) => ({ name: defExport.partFileName(base, fmt, i, parts.length), text: p.text, count: p.count }));
+
+  if (!save) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${files[0].name}"`);
+    res.setHeader('X-Export-Objects', String(list.length));
+    return res.send(files[0].text);
+  }
+
+  const definitions = files.reduce((acc, f) => {
+    const c = defExport.countDefinitions(f.text);
+    return { total: acc.total + c.total, overlays: acc.overlays + c.overlays };
+  }, { total: 0, overlays: 0 });
+  const [deps, targetForms] = await Promise.all([
+    svc().exportDependencies(conn, list),
+    target ? svc().forms(target) : Promise.resolve(null)
+  ]);
+  const manifest = defExport.manifestMarkdown({
+    source: conn.name, target: target ? target.name : null, scope, format: fmt,
+    files: files.map((f) => ({ name: f.name, count: f.count })), items: list, definitions,
+    attachedForms: deps.attachedForms, referencedForms: deps.referencedForms,
+    targetForms: targetForms ? new Set(targetForms) : null
+  });
+  const saved = files.map((f) => {
+    const p = freePath(dir, f.name);
+    fs.writeFileSync(p, f.text);
+    return { path: p, bytes: Buffer.byteLength(f.text), objects: f.count };
+  });
+  const manifestPath = freePath(dir, `${base}.manifest.md`);
+  fs.writeFileSync(manifestPath, manifest);
+  const all = [...new Set([...deps.attachedForms, ...deps.referencedForms])];
+  const missingForms = targetForms ? all.filter((f) => !new Set(targetForms).has(f)).sort() : null;
+  return res.json({
+    saved, manifestPath, objects: list.length, definitions, format: fmt, missingForms,
+    forms: all.length, attachedForms: deps.attachedForms.length, referencedForms: deps.referencedForms.length
+  });
+}
+
+router.get('/export-folder', (req, res) => {
+  const dir = exportDir();
+  res.json({ dir, exists: !!dir && fs.existsSync(dir) });
+});
+
+router.put('/export-folder', (req, res) => {
+  const dir = checkFolder(req.body && req.body.dir);
+  workflow.writeSettings(dataDir(), { exportDir: dir });
+  res.json({ dir, exists: true });
+});
 
 let jobs = null;
 const compareJobs = () => {
@@ -107,6 +208,25 @@ function jobOr404(req) {
   }
   return job;
 }
+
+// Export what a compare found: objects only on the left and/or different, taken from the LEFT instance.
+router.post('/compare/:jobId/export-def', async (req, res) => {
+  const job = jobOr404(req);
+  if (job.status !== 'done') return res.status(409).json({ error: 'The comparison has not finished.' });
+  const { include = ['onlyLeft', 'modified'], format, save } = req.body || {};
+  const wanted = (Array.isArray(include) ? include : []).filter((s) => ['onlyLeft', 'modified'].includes(s));
+  if (!wanted.length) return res.status(400).json({ error: 'Choose "only on the left" and/or "different".' });
+  const items = job.result.items.filter((i) => wanted.includes(i.status)).map((i) => ({ kind: i.kind, name: i.name }));
+  if (!items.length) return res.status(400).json({ error: 'There is nothing to export for that selection.' });
+  const [left, right] = [await connById(req, job.left.id), await connById(req, job.right.id)];
+  const what = wanted.map((s) => (s === 'onlyLeft' ? `only on ${left.name}` : 'different')).join(' + ');
+  const scopeName = job.scope.type === 'form' ? `form ${job.scope.form}` : `names matching ${job.scope.pattern}`;
+  return runExport(res, {
+    conn: left, target: right, items, format, save: !!save,
+    label: `${scopeName.replace(/^(form|names matching) /, '')}_${wanted.join('-')}`,
+    scope: `Compare of ${scopeName}: objects ${what} compared with ${right.name}`
+  });
+});
 
 router.get('/compare/:jobId', (req, res) => {
   const job = jobOr404(req);
@@ -228,6 +348,31 @@ router.get('/:id/recent/export', async (req, res) => {
     md: () => reports.recentMarkdown(recent, { instance: conn.name }),
     csv: () => reports.recentCsv(recent)
   });
+});
+
+// Export objects from this instance: an explicit list, or everything attached to a form.
+router.post('/:id/export', async (req, res) => {
+  const conn = await connection(req);
+  const { items, scope, format, save, label } = req.body || {};
+  let list = items;
+  let scopeText = 'Selected objects';
+  let name = label;
+  if (scope && scope.type === 'form') {
+    const form = String(scope.form || '').trim();
+    if (!form) return res.status(400).json({ error: 'Enter a form name.' });
+    const kinds = (Array.isArray(scope.kinds) && scope.kinds.length ? scope.kinds : ['activeLink', 'filter', 'escalation'])
+      .filter((k) => workflow.KINDS.includes(k));
+    const w = await svc().formWorkflow(conn, form);
+    const keyOf = { activeLink: 'activeLinks', filter: 'filters', escalation: 'escalations' };
+    list = kinds.flatMap((k) => (w[keyOf[k]] || []).map((n) => ({ kind: k, name: n })));
+    if (scope.includeForm) list.push({ kind: 'form', name: form });
+    scopeText = `Everything attached to form ${form}: ${kinds.join(', ')}${scope.includeForm ? ' and the form definition' : ''}`;
+    name = name || form;
+  } else if (Array.isArray(items)) {
+    scopeText = `${items.length} selected object${items.length === 1 ? '' : 's'}`;
+    name = name || (items.length === 1 ? items[0].name : 'selection');
+  }
+  return runExport(res, { conn, items: list, format, save: !!save, label: name, scope: scopeText });
 });
 
 router.get('/:id/forms', async (req, res) => {

@@ -106,6 +106,33 @@ export const searchWorkflow = (connId, kind, q) =>
 export const getWorkflowObject = (connId, kind, name) =>
   api.get(`/workflow/${connId}/object`, { params: { kind, name } }).then(r => r.data);
 
+// ── Definition export (.def / .xml) ────────────────────────────────────────────
+export const getExportFolder = () => api.get('/workflow/export-folder').then(r => r.data);
+export const setExportFolder = (dir) => api.put('/workflow/export-folder', { dir }).then(r => r.data);
+
+/** Save to the export folder: JSON summary back. */
+export const exportDefSave = (endpoint, body) => api.post(endpoint, { ...body, save: true }).then(r => r.data);
+
+/** Download: the file comes back as the response. Errors are JSON even though we asked for a blob. */
+export async function exportDefDownload(endpoint, body) {
+  try {
+    const r = await api.post(endpoint, { ...body, save: false }, { responseType: 'blob' });
+    const cd = r.headers['content-disposition'] || '';
+    const name = (/filename="([^"]+)"/.exec(cd) || [])[1] || 'export.def';
+    const url = URL.createObjectURL(r.data);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    return { name, objects: Number(r.headers['x-export-objects'] || 0) };
+  } catch (e) {
+    if (e.response && e.response.data instanceof Blob) {
+      try { e.response.data = JSON.parse(await e.response.data.text()); } catch { /* not JSON */ }
+    }
+    throw e;
+  }
+}
+
 // ── Workflow compare (Dev vs Prod) ───────────────────────────────────────────
 export const startWorkflowCompare = (body) =>
   api.post('/workflow/compare', body).then(r => r.data);
