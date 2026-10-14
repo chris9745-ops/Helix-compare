@@ -142,3 +142,9 @@
 .setupActions { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .saved { color: var(--green); font-size: 12px; }
 .setupBar { padding: 8px 16px 0; flex-shrink: 0; }
+
+.detailTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.listExport { padding: 8px; border-bottom: 1px solid var(--border); }
+.listExport > span { display: block; }
+.exportOpts { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; font-size: 13px; color: var(--text-secondary); }
+.exportOpts label { display: flex; align-items: center; gap: 8px; }

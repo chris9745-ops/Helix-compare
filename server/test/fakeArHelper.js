@@ -147,7 +147,26 @@ const handlers = {
     data = Number(r.port) === 48000 ? DATASETS.prod : DATASETS.dev;
     return { host: r.host, port: r.port, user: r.user };
   },
-  listForms: () => ['HPD:Help Desk', 'CTM:Support Group'],
+  // Prod deliberately lacks CTM:Support Group so "forms missing on the target" has something to find
+  listForms: () => (data === DATASETS.prod ? ['HPD:Help Desk'] : ['HPD:Help Desk', 'CTM:Support Group']),
+  exportDef: (r) => {
+    const KIND = { 5: 'filter', 6: 'activeLink', 9: 'escalation' };
+    const LABEL = { 1: 'schema', 5: 'filter', 6: 'active link', 9: 'escalation' };
+    if (!r.items || !r.items.length) throw new Error('exportDef needs at least one object.');
+    const blocks = r.items.map((i) => {
+      const exists = i.type === 1 ? !!FIELDS[i.name] : !!(data.objects[KIND[i.type]] || {})[i.name];
+      if (!exists) throw new Error(`ERROR (2): ${i.name} does not exist on the server`);
+      return r.format === 'xml'
+        ? `<${LABEL[i.type].replace(' ', '-')} name="${i.name}"/>`
+        : `begin ${LABEL[i.type]}\n   name : ${i.name}\nend`;
+    });
+    return {
+      count: r.items.length, variant: r.format === 'xml' ? 'xml' : 'def',
+      text: r.format === 'xml'
+        ? `<?xml version="1.0" encoding="utf-8"?><root>${blocks.join('')}</root>`
+        : `char-set: UTF-8\n#\n#  File exported (fake)\n#\n${blocks.join('\n')}\n`
+    };
+  },
   listWorkflow: (r) => {
     const names = data.names[r.kind][r.form || '*'] || [];
     if (r.since === undefined || r.since === null) return names;

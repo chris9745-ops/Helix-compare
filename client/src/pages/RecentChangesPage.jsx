@@ -4,6 +4,7 @@ import { getConnections, getWorkflowStatus, getRecentChanges, recentExportUrl } 
 import { useAppStore } from '../lib/store';
 import { useAuthUser } from '../components/AuthGate';
 import PageHeader from '../components/PageHeader';
+import ExportDef from '../components/ExportDef';
 import { Notice, Badge, Detail } from './WorkflowPage';
 import shared from './WorkflowPage.module.css';
 import styles from './RecentChangesPage.module.css';
@@ -115,6 +116,16 @@ export default function RecentChangesPage() {
           />
           <button type="submit" disabled={!form.trim() || form.trim() === submittedForm}>Apply</button>
         </form>
+        {q.data && (
+          <ExportDef
+            label="Export .def…"
+            endpoint={`/workflow/${activeConnectionId}/export`}
+            body={{ items: rows.map(r => ({ kind: r.kind, name: r.name })), label: 'recent-changes' }}
+            count={rows.length}
+            disabled={rows.length === 0}
+            note="Exports the changed objects currently listed (after the person and text filters), as definition files."
+          />
+        )}
         {q.data && (
           <span className={styles.exports}>
             <a className={styles.exportBtn} download href={recentExportUrl(activeConnectionId, exportParams, 'md')}>Report (.md)</a>

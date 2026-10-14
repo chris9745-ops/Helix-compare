@@ -7,6 +7,7 @@ import {
 import { useAppStore } from '../lib/store';
 import { useAuthUser } from '../components/AuthGate';
 import PageHeader from '../components/PageHeader';
+import ExportDef from '../components/ExportDef';
 import Button from '../components/Button';
 import { Notice, Badge, ActionBlock } from './WorkflowPage';
 import shared from './WorkflowPage.module.css';
@@ -124,6 +125,7 @@ export default function WorkflowComparePage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [text, setText] = useState('');
   const [selected, setSelected] = useState(null);
+  const [exportInclude, setExportInclude] = useState({ onlyLeft: true, modified: true });
 
   // sensible defaults: the sidebar's instance on the left, the next one on the right
   useEffect(() => {
@@ -316,6 +318,25 @@ export default function WorkflowComparePage() {
               </button>
             ))}
             <input className={styles.filter} placeholder="Filter by name…" value={text} onChange={e => setText(e.target.value)} />
+            <ExportDef
+              label="Export .def…"
+              endpoint={`/workflow/compare/${jobId}/export-def`}
+              body={{ include: Object.keys(exportInclude).filter(k => exportInclude[k]) }}
+              count={(exportInclude.onlyLeft ? totals.onlyLeft : 0) + (exportInclude.modified ? totals.modified : 0)}
+              disabled={!exportInclude.onlyLeft && !exportInclude.modified}
+              note={`Definitions taken from ${leftName}, ready to import into ${rightName} with your usual BMC process. The manifest lists the forms they need that ${rightName} doesn't have.`}
+            >
+              <div className={styles.exportOpts}>
+                <label>
+                  <input type="checkbox" checked={exportInclude.onlyLeft} onChange={e => setExportInclude(x => ({ ...x, onlyLeft: e.target.checked }))} />
+                  Only on {leftName} ({totals.onlyLeft})
+                </label>
+                <label>
+                  <input type="checkbox" checked={exportInclude.modified} onChange={e => setExportInclude(x => ({ ...x, modified: e.target.checked }))} />
+                  Different — {leftName}'s version ({totals.modified})
+                </label>
+              </div>
+            </ExportDef>
             <span className={styles.exports}>
               <a className={styles.exportBtn} href={compareExportUrl(jobId, { format: 'md', details: true })} download
                  title="Markdown report including what changed in each different object">Report (.md)</a>

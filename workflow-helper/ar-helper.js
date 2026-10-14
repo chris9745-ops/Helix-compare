@@ -366,6 +366,28 @@ var commands = {
     return out;
   },
 
+  /**
+   * The server's own definition export (the format Dev Studio's Export and arexport produce) for
+   * a list of objects: [{ type, name }] with `type` an AR_STRUCT_ITEM_* code (1 form, 5 filter,
+   * 6 active link, 9 escalation, 8 menu, 12 container, ...). Read-only: it reads definitions and
+   * returns the text; nothing on the server changes.
+   */
+  exportDef: function (r) {
+    need();
+    var StructItemInfo = Java.type('com.bmc.arsys.api.StructItemInfo');
+    var items = r.items || [];
+    if (!items.length) throw new Error('exportDef needs at least one object.');
+    var list = new java.util.ArrayList();
+    for (var i = 0; i < items.length; i++) {
+      list.add(new StructItemInfo(parseInt(items[i].type, 10), String(items[i].name)));
+    }
+    // exportDef(List) is the classic .def; the boolean overload's `true` selects XML (checked on 26.3)
+    var xml = r.format === 'xml';
+    var text = xml ? ctx.exportDef(list, true) : ctx.exportDef(list);
+    var v = xml ? 'xml' : 'def';
+    return { count: items.length, variant: v, text: text === null ? '' : String(text) };
+  },
+
   /** Field id -> name/type for a form, to render qualifiers and assignments readably. */
   getFields: function (r) {
     need();
