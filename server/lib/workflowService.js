@@ -14,6 +14,7 @@ const path = require('path');
 const readline = require('readline');
 const { describeObject, referencedForms } = require('./arRender');
 const arLayout = require('./arLayout');
+const { assertPasswordUsable } = require('./connectionGuard');
 
 const KINDS = ['activeLink', 'filter', 'escalation'];
 const REQUEST_TIMEOUT_MS = 180000;
@@ -193,6 +194,7 @@ class WorkflowService {
       this._touch(existing);
       return existing;
     }
+    assertPasswordUsable(conn);
     if (!this.config.ready) throw httpError(400, this.config.problems.join(' '));
     if (!conn.arPort) {
       throw httpError(400, 'Set the AR server port for this connection first (the Client Gateway port, e.g. 46000 for Dev).');
